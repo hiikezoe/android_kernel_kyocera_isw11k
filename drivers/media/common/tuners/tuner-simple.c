@@ -540,6 +540,7 @@ static int simple_radio_bandswitch(struct dvb_frontend *fe, u8 *buffer)
 
 /* ---------------------------------------------------------------------- */
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int simple_set_tv_freq(struct dvb_frontend *fe,
 			      struct analog_parameters *params)
 {

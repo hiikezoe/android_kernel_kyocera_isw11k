@@ -256,6 +256,7 @@ void msm_adsp_put(struct msm_adsp_module *module)
 }
 EXPORT_SYMBOL(msm_adsp_put);
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int __msm_adsp_write(struct msm_adsp_module *module, unsigned dsp_queue_addr,
 		   void *cmd_buf, size_t cmd_size)
 {

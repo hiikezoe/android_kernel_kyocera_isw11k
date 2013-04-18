@@ -465,6 +465,7 @@ error:
  *	type;uid;gid;perm;description<NUL>
  * - implements keyctl(KEYCTL_DESCRIBE)
  */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 long keyctl_describe_key(key_serial_t keyid,
 			 char __user *buffer,
 			 size_t buflen)

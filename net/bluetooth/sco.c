@@ -735,6 +735,7 @@ static int sco_sock_getsockopt_old(struct socket *sock, int optname, char __user
 	return err;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int sco_sock_getsockopt(struct socket *sock, int level, int optname, char __user *optval, int __user *optlen)
 {
 	struct sock *sk = sock->sk;

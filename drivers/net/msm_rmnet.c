@@ -759,6 +759,7 @@ static int msm_rmnet_smd_probe(struct platform_device *pdev)
 	return 0;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int __init rmnet_init(void)
 {
 	int ret;

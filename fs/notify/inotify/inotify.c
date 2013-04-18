@@ -557,6 +557,7 @@ static void unpin_and_kill(struct inotify_watch *watch)
  * inotify_destroy - clean up and destroy an inotify instance
  * @ih: inotify handle
  */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void inotify_destroy(struct inotify_handle *ih)
 {
 	/*

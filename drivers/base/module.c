@@ -30,6 +30,7 @@ static void module_create_drivers_dir(struct module_kobject *mk)
 	mk->drivers_dir = kobject_create_and_add("drivers", &mk->kobj);
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void module_add_driver(struct module *mod, struct device_driver *drv)
 {
 	char *driver_name;

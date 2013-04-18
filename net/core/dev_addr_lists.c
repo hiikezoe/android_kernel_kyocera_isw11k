@@ -135,6 +135,7 @@ unroll:
 }
 EXPORT_SYMBOL(__hw_addr_add_multiple);
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void __hw_addr_del_multiple(struct netdev_hw_addr_list *to_list,
 			    struct netdev_hw_addr_list *from_list,
 			    int addr_len, unsigned char addr_type)

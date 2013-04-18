@@ -452,6 +452,7 @@ static int msm_adc_read_result(struct msm_adc_drv *msm_adc,
 	return rc;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static long msm_adc_ioctl(struct file *file, unsigned int cmd,
 					     unsigned long arg)
 {
@@ -724,6 +725,7 @@ blk_conv_err:
 	return rc;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int msm_adc_blocking_conversion(struct msm_adc_drv *msm_adc,
 			uint32_t hwmon_chan, struct adc_chan_result *result)
 {

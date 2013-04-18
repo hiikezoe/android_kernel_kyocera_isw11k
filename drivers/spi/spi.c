@@ -564,6 +564,7 @@ static int __unregister(struct device *dev, void *master_dev)
  *
  * This must be called from context that can sleep.
  */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void spi_unregister_master(struct spi_master *master)
 {
 	int dummy;

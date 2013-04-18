@@ -1514,6 +1514,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
  *
  * Immediately put all linked substreams into SETUP state.
  */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int snd_pcm_drop(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime;

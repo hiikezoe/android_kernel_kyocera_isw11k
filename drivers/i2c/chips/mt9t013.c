@@ -387,6 +387,7 @@ static int msm_camio_clk_enable (int clk_type)
 	return -EINVAL; 
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int msm_camio_clk_disable(int clk_type)
 {
 	int rc = 0;

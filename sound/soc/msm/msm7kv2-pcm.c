@@ -251,6 +251,7 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int msm_pcm_capture_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;

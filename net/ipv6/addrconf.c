@@ -714,6 +714,7 @@ out:
 
 /* This function wants to get referenced ifp and releases it before return */
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 {
 	struct inet6_ifaddr *ifa, *ifn;

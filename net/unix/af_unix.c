@@ -1536,6 +1536,7 @@ out:
 }
 
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int unix_stream_sendmsg(struct kiocb *kiocb, struct socket *sock,
 			       struct msghdr *msg, size_t len)
 {

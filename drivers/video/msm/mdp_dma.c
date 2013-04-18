@@ -507,6 +507,7 @@ void mdp_set_dma_pan_info(struct fb_info *info, struct mdp_dirty_region *dirty,
 	up(&mfd->sem);
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void mdp_dma_pan_update(struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;

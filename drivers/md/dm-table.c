@@ -1038,6 +1038,7 @@ combine_limits:
  * Set the integrity profile for this device if all devices used have
  * matching profiles.
  */
+#pragma GCC diagnostic ignored "-Wunused-value"
 static void dm_table_set_integrity(struct dm_table *t)
 {
 	struct list_head *devices = dm_table_get_devices(t);

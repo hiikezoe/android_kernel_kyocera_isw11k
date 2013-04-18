@@ -515,6 +515,7 @@ int ts_touch_power_charge( int chg )
 
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int ts_confirm_check_values(u16 position, u8 size, u8 *base)
 {
     u8  write_buf[60];
@@ -541,6 +542,7 @@ static int ts_confirm_check_values(u16 position, u8 size, u8 *base)
     return ret;
 }
 
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 static void ts_touch_confirm_object(void)
 {
 

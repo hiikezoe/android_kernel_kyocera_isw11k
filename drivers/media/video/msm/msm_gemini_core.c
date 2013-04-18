@@ -106,6 +106,7 @@ void *msm_gemini_core_fe_pingpong_irq(int gemini_irq_status, void *context)
 }
 
 /* write engine */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int msm_gemini_core_we_buf_update(struct msm_gemini_core_buf *buf)
 {
 	int rc;

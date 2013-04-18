@@ -560,6 +560,7 @@ static void audlpa_async_send_buffer(struct audio *audio)
 	}
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void audlpa_async_send_data(struct audio *audio, unsigned needed,
 				uint32_t *payload)
 {

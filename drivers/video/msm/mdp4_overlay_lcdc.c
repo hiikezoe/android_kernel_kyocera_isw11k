@@ -53,6 +53,7 @@ static struct mdp4_overlay_pipe *lcdc_pipe;
 static struct completion lcdc_comp;
 static int wait4vsync_cnt;
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int mdp_lcdc_on(struct platform_device *pdev)
 {
 	int lcdc_width;

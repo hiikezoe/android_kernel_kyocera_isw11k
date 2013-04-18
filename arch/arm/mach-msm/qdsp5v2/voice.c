@@ -91,6 +91,7 @@ static int voice_cmd_change(void)
 	return err;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void voice_auddev_cb_function(u32 evt_id,
 			union auddev_evt_data *evt_payload,
 			void *private_data)

@@ -258,6 +258,7 @@ static int vpe_operation_config(uint32_t *p)
 *  rotation is enabled, simply swap the destination dimension.
 *  And then pass the already swapped output size to this
 *  function. */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int vpe_update_scaler(struct video_crop_t *pcrop)
 {
 	uint32_t out_ROI_width, out_ROI_height;

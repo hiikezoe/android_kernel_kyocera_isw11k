@@ -108,6 +108,7 @@ static void ct_seq_stop(struct seq_file *s, void *v)
 	rcu_read_unlock();
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 /* return 0 on success, 1 in case of error */
 static int ct_seq_show(struct seq_file *s, void *v)
 {

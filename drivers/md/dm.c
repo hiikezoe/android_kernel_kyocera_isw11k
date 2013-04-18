@@ -1180,6 +1180,7 @@ static void __flush_target(struct clone_info *ci, struct dm_target *ti,
 	__map_bio(ti, clone, tio);
 }
 
+#pragma GCC diagnostic ignored "-Wunused-value"
 static int __clone_and_map_empty_barrier(struct clone_info *ci)
 {
 	unsigned target_nr = 0, flush_nr;

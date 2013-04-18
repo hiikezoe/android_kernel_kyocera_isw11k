@@ -1619,6 +1619,7 @@ int tc_classify_compat(struct sk_buff *skb, struct tcf_proto *tp,
 }
 EXPORT_SYMBOL(tc_classify_compat);
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int tc_classify(struct sk_buff *skb, struct tcf_proto *tp,
 		struct tcf_result *res)
 {

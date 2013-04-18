@@ -1345,6 +1345,7 @@ static inline void remove_notes_attrs(struct module *mod)
 #endif
 
 #ifdef CONFIG_SYSFS
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void add_usage_links(struct module *mod)
 {
 #ifdef CONFIG_MODULE_UNLOAD

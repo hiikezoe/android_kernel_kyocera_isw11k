@@ -195,6 +195,7 @@ int install_process_keyring_to_cred(struct cred *new)
  * make sure a process keyring is installed
  * - we
  */
+#pragma GCC diagnostic ignored "-Wparentheses"
 static int install_process_keyring(void)
 {
 	struct cred *new;

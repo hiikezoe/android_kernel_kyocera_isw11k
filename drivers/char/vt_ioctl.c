@@ -122,6 +122,7 @@ void vt_event_post(unsigned int event, unsigned int old, unsigned int new)
  *	or 0 if some event such as a signal ended the wait.
  */
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void vt_event_wait(struct vt_event_wait *vw)
 {
 	unsigned long flags;

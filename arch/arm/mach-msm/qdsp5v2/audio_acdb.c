@@ -1090,6 +1090,7 @@ static void rtc_acdb_deinit(void)
 	}
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static bool rtc_acdb_init(void)
 {
 	struct rtc_acdb_pmem *rtc_read = &rtc_acdb.rtc_read;

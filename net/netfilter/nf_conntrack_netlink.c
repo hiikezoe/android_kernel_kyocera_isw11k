@@ -730,6 +730,7 @@ static const struct nla_policy tuple_nla_policy[CTA_TUPLE_MAX+1] = {
 	[CTA_TUPLE_PROTO]	= { .type = NLA_NESTED },
 };
 
+#pragma GCC diagnostic ignored "-Wenum-compare"
 static int
 ctnetlink_parse_tuple(const struct nlattr * const cda[],
 		      struct nf_conntrack_tuple *tuple,

@@ -297,6 +297,7 @@ static ssize_t msm_pm_mode_attr_store(struct kobject *kobj,
 /*
  * Add sysfs entries for the sleep modes.
  */
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 static int __init msm_pm_mode_sysfs_add(void)
 {
 	struct kobject *module_kobj = NULL;
@@ -1829,6 +1830,7 @@ static int kcj_write_android_crash_info( const char *cmd )
         printk( KERN_ERR "%s() : reset_kind = 0x%08x\n", __func__, reset_kind );
         return( reset_kind );
 }
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void msm_pm_restart(char str, const char *cmd)
 {
   int pm_restart_info = 0;

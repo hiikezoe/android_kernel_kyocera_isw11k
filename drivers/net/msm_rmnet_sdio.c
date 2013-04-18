@@ -642,6 +642,7 @@ static void __init rmnet_setup(struct net_device *dev)
 }
 
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int __init rmnet_init(void)
 {
 	int ret;

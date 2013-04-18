@@ -822,6 +822,7 @@ static void pm8058_irq_ack(unsigned int irq)
 	chip->bus_unlock_config[irq] = config;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int pm8058_irq_set_type(unsigned int irq, unsigned int flow_type)
 {
 	int	master, irq_bit;

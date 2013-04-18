@@ -72,6 +72,8 @@ static void nat_decode_session(struct sk_buff *skb, struct flowi *fl)
 }
 #endif
 
+#pragma GCC diagnostic ignored "-Wswitch"
+#pragma GCC diagnostic ignored "-Waddress"
 static unsigned int
 nf_nat_fn(unsigned int hooknum,
 	  struct sk_buff *skb,

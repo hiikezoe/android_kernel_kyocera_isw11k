@@ -1011,6 +1011,7 @@ out:
 	return &rt->u.dst;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int icmp6_dst_gc(void)
 {
 	struct dst_entry *dst, *next, **pprev;

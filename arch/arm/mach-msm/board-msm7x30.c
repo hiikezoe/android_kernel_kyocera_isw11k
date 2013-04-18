@@ -295,6 +295,7 @@ static struct platform_device gpio_keys = {
 
 
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 #define PM_FLIP_MPP 5 /* PMIC MPP 06 */
 static int pm8058_gpios_init(void)
 {

@@ -43,6 +43,7 @@ static int snddev_virtual_close(struct msm_snddev_info *dev_info)
 	return rc;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int snddev_virtual_set_freq(struct msm_snddev_info *dev_info, u32 rate)
 {
 	int rc = 0;

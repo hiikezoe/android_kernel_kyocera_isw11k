@@ -645,6 +645,7 @@ void exit_irq_thread(void)
  * Internal function to register an irqaction - typically used to
  * allocate special interrupts that are part of the architecture.
  */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int
 __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 {

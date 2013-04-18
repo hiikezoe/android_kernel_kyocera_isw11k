@@ -1110,6 +1110,7 @@ static int ep_send_events(struct eventpoll *ep,
 	return ep_scan_ready_list(ep, ep_send_events_proc, &esed);
 }
 
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 		   int maxevents, long timeout)
 {

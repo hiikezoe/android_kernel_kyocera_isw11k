@@ -784,6 +784,7 @@ static void sdio_al_sleep(struct sdio_al_device *sdio_al_dev,
  * calling it.
  *
  */
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int read_mailbox(struct sdio_al_device *sdio_al_dev, int from_isr)
 {
 	int ret;

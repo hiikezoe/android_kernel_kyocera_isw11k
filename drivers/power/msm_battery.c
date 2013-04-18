@@ -707,6 +707,7 @@ static void msm_batt_save_adjust_nv(void)
 	}
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void msm_batt_update_psy_status(void)
 {
 	u32 charger_status;

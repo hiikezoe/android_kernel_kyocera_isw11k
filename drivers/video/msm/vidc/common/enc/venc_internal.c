@@ -847,6 +847,7 @@ u32 vid_enc_request_iframe(struct video_client_ctx *client_ctx)
 	return status;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 u32 vid_enc_get_sequence_header(struct video_client_ctx *client_ctx,
 		struct venc_seqheader	*seq_header)
 {
