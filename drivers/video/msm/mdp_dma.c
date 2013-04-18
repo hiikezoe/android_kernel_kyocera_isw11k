@@ -15,6 +15,10 @@
  * 02110-1301, USA.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -552,3 +556,19 @@ void mdp_refresh_screen(unsigned long data)
 			complete(&mfd->refresher_comp);
 	}
 }
+
+void mdp_refresh_screen_at_once( struct msm_fb_data_type *data )
+{
+    struct msm_fb_data_type *mfd = data;
+
+    if (mfd)
+    {
+
+        INIT_COMPLETION(mfd->dma->comp);
+        mfd->dma_fnc( mfd );
+
+        wait_for_completion(&mfd->dma->comp);
+    }
+
+}
+

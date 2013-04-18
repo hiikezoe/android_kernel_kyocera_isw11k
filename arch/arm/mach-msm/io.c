@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* arch/arm/mach-msm/io.c
  *
  * MSM7K, QSD io support
@@ -16,7 +20,6 @@
  * GNU General Public License for more details.
  *
  */
-
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/io.h>
@@ -217,6 +220,9 @@ static struct map_desc msm7x30_io_desc[] __initdata = {
 		.length =   MSM_SHARED_RAM_SIZE,
 		.type =     MT_DEVICE,
 	},
+#if defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41)
+	MSM_DEVICE(KCJLOG),
+#endif
 };
 
 void __init msm_map_msm7x30_io(void)

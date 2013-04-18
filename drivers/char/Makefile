@@ -1,10 +1,19 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
+#
 # Makefile for the kernel character device drivers.
 #
 
 #
 # This file contains the font map for the default (hardware) font
 #
+ifeq ($(TARGET_BUILD_VARIANT),eng)
+  KBUILD_CFLAGS += -DKEYLOG_ENABLE
+endif
+
 FONTMAPFILE = cp437.uni
 
 obj-y	 += mem.o random.o tty_io.o n_tty.o tty_ioctl.o tty_ldisc.o tty_buffer.o tty_port.o
@@ -117,6 +126,13 @@ js-rtc-y = rtc.o
 
 obj-$(CONFIG_MSM_ROTATOR)	+= msm_rotator.o
 obj-$(CONFIG_MMC_GENERIC_CSDIO)	+= csdio.o
+
+obj-$(CONFIG_FEATURE_KCC_F45)	+= key_dm_driver.o
+
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_cdev_driver.o
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_k_api.o
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_fs.o
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_drv.o
 
 # Files generated that shall be removed upon make clean
 clean-files := consolemap_deftbl.c defkeymap.c

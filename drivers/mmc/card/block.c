@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
+/*
  * Block driver for media (i.e., flash cards)
  *
  * Copyright 2002 Hewlett-Packard Company
@@ -509,6 +513,10 @@ static inline int mmc_blk_readonly(struct mmc_card *card)
 	       !(card->csd.cmdclass & CCC_BLOCK_WRITE);
 }
 
+#ifdef CONFIG_MMC_MSM_FOTA
+extern void kc_fota_set_blkptr(struct mmc_blk_data *in_ptr);
+#endif
+
 static struct mmc_blk_data *mmc_blk_alloc(struct mmc_card *card)
 {
 	struct mmc_blk_data *md;
@@ -586,6 +594,11 @@ static struct mmc_blk_data *mmc_blk_alloc(struct mmc_card *card)
 		set_capacity(md->disk,
 			card->csd.capacity << (card->csd.read_blkbits - 9));
 	}
+    
+#ifdef CONFIG_MMC_MSM_FOTA
+    kc_fota_set_blkptr(md);
+#endif
+
 	return md;
 
  err_putdisk:

@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -39,6 +43,11 @@
 #include <mach/msm_rpcrouter.h>
 #include <mach/msm_battery.h>
 
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+#include <linux/gpio.h>
+#include <linux/dnand_cdev_driver.h>
+#endif
+
 #define BATTERY_RPC_PROG	0x30000089
 #define BATTERY_RPC_VER_1_1	0x00010001
 #define BATTERY_RPC_VER_2_1	0x00020001
@@ -64,7 +73,11 @@
 
 #define BATTERY_CB_TYPE_PROC		1
 #define BATTERY_CB_ID_ALL_ACTIV		1
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+#define BATTERY_CB_ID_KC_SLEEP		2
+#else
 #define BATTERY_CB_ID_LOW_VOL		2
+#endif
 
 #define BATTERY_LOW		3200
 #define BATTERY_HIGH		4300
@@ -113,6 +126,9 @@ enum {
 	BATTERY_VOLTAGE_LEVEL,
 	BATTERY_ALL_ACTIVITY,
 	VBATT_CHG_EVENTS,
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	BATTERY_KC_SLEEP,
+#endif
 	BATTERY_VOLTAGE_UNKNOWN,
 };
 
@@ -144,6 +160,10 @@ enum chg_charger_hardware_type {
 	CHARGER_TYPE_USB_WALL,
 	/* The charger is a USB carkit             */
 	CHARGER_TYPE_USB_CARKIT,
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+    CHARGER_TYPE_USB_STEREO_EARPHONE,  
+    CHARGER_TYPE_USB_MONAURAL_EARPHONE,  
+#endif
 	/* Invalid charger hardware status.        */
 	CHARGER_TYPE_INVALID
 };
@@ -201,6 +221,20 @@ struct rpc_reply_batt_chg_v2 {
 	u32	is_charging;
 	u32	is_battery_valid;
 	u32	ui_event;
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	u32	nv_chg_cv__low_tmp_chg;
+	u32	nv_chg_cv__low_tmp_rechg;
+	u32	nv_chg_cv__normal_chg;
+	u32	nv_chg_cv__rechg;
+	u32	nv_chg_cv__hi_tmp_chg;
+	u32	nv_chg_cv__hi_tmp_rechg;
+	u32	nv_chg_cv__wait_tmp_chg;
+	u32	nv_chg_cv__wait_tmp_rechg;
+	u32	nv_vbatt_lvl_cal_v__cal_vbat1;
+	u32	nv_vbatt_lvl_cal_v__cal_vbat2;
+	u32	nv_vbatt_thr_cal_v__cal_temp1;
+	u32	nv_vbatt_thr_cal_v__cal_temp2;
+#endif
 };
 
 union rpc_reply_batt_chg {
@@ -234,6 +268,15 @@ struct msm_battery_info {
 	u32 battery_voltage; /* in millie volts */
 	u32 battery_temp;  /* in celsius */
 
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	u32 camera_temp;
+	u32 illuminometer;
+	u32 soc_err;
+	u32 pa_temp;
+	u32 pa_err;
+	u32 is_chg;
+#endif
+
 	u32(*calculate_capacity) (u32 voltage);
 
 	s32 batt_handle;
@@ -265,6 +308,14 @@ static struct msm_battery_info msm_batt_info = {
 	.batt_health = POWER_SUPPLY_HEALTH_GOOD,
 	.batt_valid  = 1,
 	.battery_temp = 23,
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	.camera_temp = 0,
+	.illuminometer = 0,
+	.soc_err = 0,
+	.pa_temp = 0,
+	.pa_err = 0,
+	.is_chg = 0,
+#endif
 	.vbatt_modify_reply_avail = 0,
 };
 
@@ -317,6 +368,20 @@ static struct power_supply msm_psy_usb = {
 	.get_property = msm_power_get_property,
 };
 
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+struct power_supply_mv_info {
+	u32 battery_mv;
+	u32 battery_temp;
+	u32 battery_soc;
+	u32 soc_err;
+	u32 camera_temp;
+	u32 illuminometer;
+	u32 pa_temp;
+	u32 pa_err;
+	u32 is_chg;
+};
+#endif
+
 static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_HEALTH,
@@ -326,6 +391,14 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_CAPACITY,
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CAMERA_TEMP,
+	POWER_SUPPLY_PROP_ILLUMINOMETER_LUX,
+	POWER_SUPPLY_PROP_CAPACITY_ERR,
+	POWER_SUPPLY_PROP_PA_TEMP,
+	POWER_SUPPLY_PROP_PA_ERR,
+#endif
 };
 
 static int msm_batt_power_get_property(struct power_supply *psy,
@@ -357,6 +430,26 @@ static int msm_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = msm_batt_info.batt_capacity;
 		break;
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	case POWER_SUPPLY_PROP_TEMP:
+		val->intval = msm_batt_info.battery_temp;
+		break;
+	case POWER_SUPPLY_PROP_CAMERA_TEMP:
+		val->intval = msm_batt_info.camera_temp;
+		break;
+	case POWER_SUPPLY_PROP_ILLUMINOMETER_LUX:
+		val->intval = msm_batt_info.illuminometer;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY_ERR:
+		val->intval = msm_batt_info.soc_err;
+		break;
+	case POWER_SUPPLY_PROP_PA_TEMP:
+		val->intval = msm_batt_info.pa_temp;
+		break;
+	case POWER_SUPPLY_PROP_PA_ERR:
+		val->intval = msm_batt_info.pa_err;
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -372,9 +465,50 @@ static struct power_supply msm_psy_batt = {
 };
 
 #ifndef CONFIG_BATTERY_MSM_FAKE
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+struct msm_batt_get_volt_arg_data {
+	u32 oled_enable;
+	u32 camera_enable;
+	u32 wimax_enable;
+};
+#endif
+
 struct msm_batt_get_volt_ret_data {
 	u32 battery_voltage;
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	u32 battery_temp;
+	u32 battery_soc;
+	u32 soc_err;
+	u32 camera_temp;
+	u32 illuminometer;
+	u32 pa_temp;
+	u32 pa_err;
+	u32 is_chg;
+#endif
 };
+
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+static int msm_batt_get_volt_arg_func(struct msm_rpc_client *batt_client, void *buf, void *data)
+{
+	struct msm_batt_get_volt_arg_data *batt_volt_arg_data = (struct msm_batt_get_volt_arg_data *)data;
+	u32 *req = (u32 *)buf;
+	int size = 0;
+
+	*req = cpu_to_be32(batt_volt_arg_data->oled_enable);
+	size += sizeof(u32);
+	req++;
+
+	*req = cpu_to_be32(batt_volt_arg_data->camera_enable);
+	size += sizeof(u32);
+	req++;
+
+	*req = cpu_to_be32(batt_volt_arg_data->wimax_enable);
+	size += sizeof(u32);
+	req++;
+
+	return size;
+}
+#endif
 
 static int msm_batt_get_volt_ret_func(struct msm_rpc_client *batt_client,
 				       void *buf, void *data)
@@ -386,9 +520,56 @@ static int msm_batt_get_volt_ret_func(struct msm_rpc_client *batt_client,
 
 	data_ptr->battery_voltage = be32_to_cpu(buf_ptr->battery_voltage);
 
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	data_ptr->battery_temp      = be32_to_cpu(buf_ptr->battery_temp);
+	data_ptr->battery_soc       = be32_to_cpu(buf_ptr->battery_soc);
+	data_ptr->soc_err           = be32_to_cpu(buf_ptr->soc_err);
+	data_ptr->camera_temp       = be32_to_cpu(buf_ptr->camera_temp);
+	data_ptr->illuminometer     = be32_to_cpu(buf_ptr->illuminometer);
+	data_ptr->pa_temp           = be32_to_cpu(buf_ptr->pa_temp);
+	data_ptr->pa_err            = be32_to_cpu(buf_ptr->pa_err);
+	data_ptr->is_chg            = be32_to_cpu(buf_ptr->is_chg);
+#endif
+
 	return 0;
 }
 
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+static u32 msm_batt_get_vbatt_voltage(u32 oled_enable, u32 camera_enable, u32 wimax_enable, struct power_supply_mv_info* info)
+{
+	int rc;
+
+	struct msm_batt_get_volt_arg_data req;
+	struct msm_batt_get_volt_ret_data rep;
+
+	req.oled_enable = oled_enable;
+	req.camera_enable = camera_enable;
+	req.wimax_enable = wimax_enable;
+
+	rc = msm_rpc_client_req(msm_batt_info.batt_client,
+			BATTERY_READ_MV_PROC,
+			msm_batt_get_volt_arg_func, &req,
+			msm_batt_get_volt_ret_func, &rep,
+			msecs_to_jiffies(BATT_RPC_TIMEOUT));
+
+	if (rc < 0) {
+		pr_err("%s: FAIL: vbatt get volt. rc=%d\n", __func__, rc);
+		return 0;
+	}
+
+	info->battery_mv    = rep.battery_voltage;
+	info->battery_temp  = rep.battery_temp;
+	info->battery_soc   = rep.battery_soc;
+	info->soc_err       = rep.soc_err;
+	info->camera_temp   = rep.camera_temp;
+	info->illuminometer = rep.illuminometer;
+	info->pa_temp       = rep.pa_temp;
+	info->pa_err        = rep.pa_err;
+	info->is_chg        = rep.is_chg;
+
+	return 1;
+}
+#else
 static u32 msm_batt_get_vbatt_voltage(void)
 {
 	int rc;
@@ -408,6 +589,7 @@ static u32 msm_batt_get_vbatt_voltage(void)
 
 	return rep.battery_voltage;
 }
+#endif
 
 #define	be32_to_cpu_self(v)	(v = be32_to_cpu(v))
 
@@ -442,6 +624,24 @@ static int msm_batt_get_batt_chg_status(void)
 		be32_to_cpu_self(v1p->battery_level);
 		be32_to_cpu_self(v1p->battery_voltage);
 		be32_to_cpu_self(v1p->battery_temp);
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+		be32_to_cpu_self(rep_batt_chg.v2.is_charger_valid);
+		be32_to_cpu_self(rep_batt_chg.v2.is_charging);
+		be32_to_cpu_self(rep_batt_chg.v2.is_battery_valid);
+		be32_to_cpu_self(rep_batt_chg.v2.ui_event);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__low_tmp_chg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__low_tmp_rechg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__normal_chg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__rechg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__hi_tmp_chg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__hi_tmp_rechg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__wait_tmp_chg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_chg_cv__wait_tmp_rechg);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_vbatt_lvl_cal_v__cal_vbat1);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_vbatt_lvl_cal_v__cal_vbat2);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_vbatt_thr_cal_v__cal_temp1);
+		be32_to_cpu_self(rep_batt_chg.v2.nv_vbatt_thr_cal_v__cal_temp2);
+#endif
 	} else {
 		pr_err("%s: No battery/charger data in RPC reply\n", __func__);
 		return -EIO;
@@ -450,6 +650,261 @@ static int msm_batt_get_batt_chg_status(void)
 	return 0;
 }
 
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+static u16 nv_chg_cv[] =
+{
+  0x1004,
+  0x1004,
+  0x1068,
+  0x1036,
+  0x1004,
+  0x1004,
+  0x1004,
+  0x1004,
+};
+
+static u32 nv_vbatt_lvl_cal_v[] =
+{
+  0x0010C8E0,
+  0x00155CC0,
+};
+
+static u32 nv_vbatt_thr_cal_v[] =
+{
+  0x00105B80,
+  0x00081268,
+};
+
+static void save_adjust_nv_work_handler(struct work_struct *work)
+{
+	u32 ret = 0;
+	u32 buff_size = 0;
+
+	buff_size = sizeof( nv_chg_cv );
+	ret = kdnand_id_write( DNAND_ID_KERNEL_14, 0, (uint8_t*)nv_chg_cv, buff_size );
+	DBG_LIMIT("BATT: kdnand_id_write ret=%d size=%d\n", ret, buff_size);
+	buff_size = sizeof( nv_vbatt_lvl_cal_v );
+	ret = kdnand_id_write( DNAND_ID_KERNEL_15, 0, (uint8_t*)nv_vbatt_lvl_cal_v, buff_size );
+	DBG_LIMIT("BATT: kdnand_id_write ret=%d size=%d\n", ret, buff_size);
+	buff_size = sizeof( nv_vbatt_thr_cal_v );
+	ret = kdnand_id_write( DNAND_ID_KERNEL_16, 0, (uint8_t*)nv_vbatt_thr_cal_v, buff_size );
+	DBG_LIMIT("BATT: kdnand_id_write ret=%d size=%d\n", ret, buff_size);
+}
+
+static DECLARE_DELAYED_WORK(save_adjust_nv_work, save_adjust_nv_work_handler);
+#define DELAY_TIME_SAVE_ADJUST_NV (60*HZ)
+static atomic_t save_flag = ATOMIC_INIT(0);
+
+static void msm_batt_save_adjust_nv(void)
+{
+	int flag;
+
+	flag = atomic_read( &save_flag );
+	if( flag == 0 )
+	{
+		schedule_delayed_work( &save_adjust_nv_work, DELAY_TIME_SAVE_ADJUST_NV );
+		atomic_set( &save_flag, 1 );
+	}
+}
+
+static void msm_batt_update_psy_status(void)
+{
+	u32 charger_status;
+	u32 charger_type;
+	u32 battery_status;
+	u32 battery_level;
+	u32 battery_voltage;
+	u32 battery_temp;
+	u32 is_charger_valid;
+	u32 is_charging;
+	u32 is_battery_valid;
+	u32 ui_event;
+	struct	power_supply	*supp;
+	u32 batt_capacity;
+	u32 camera_temp;
+	u32 illuminometer;
+	u32 soc_err;
+	u32 pa_temp;
+	u32 pa_err;
+	u32 is_chg;
+	u32 oled_enable;
+	u32 camera_enable;
+	u32 wimax_enable;
+
+	oled_enable   = gpio_get_value(133);
+	camera_enable = gpio_get_value(2);
+	wimax_enable  = gpio_get_value(44);
+
+	if (msm_batt_get_batt_chg_status())
+		return;
+
+	charger_status   = rep_batt_chg.v1.charger_status;
+	charger_type     = rep_batt_chg.v1.charger_type;
+	battery_status   = rep_batt_chg.v1.battery_status;
+	battery_level    = rep_batt_chg.v1.battery_level;
+	battery_voltage  = rep_batt_chg.v1.battery_voltage;
+	battery_temp     = rep_batt_chg.v1.battery_temp;
+	is_charger_valid = rep_batt_chg.v2.is_charger_valid;
+	is_charging      = rep_batt_chg.v2.is_charging;
+	is_battery_valid = rep_batt_chg.v2.is_battery_valid;
+	ui_event         = rep_batt_chg.v2.ui_event;
+	nv_chg_cv[0] = (u16)(rep_batt_chg.v2.nv_chg_cv__low_tmp_chg   );
+	nv_chg_cv[1] = (u16)(rep_batt_chg.v2.nv_chg_cv__low_tmp_rechg );
+	nv_chg_cv[2] = (u16)(rep_batt_chg.v2.nv_chg_cv__normal_chg    );
+	nv_chg_cv[3] = (u16)(rep_batt_chg.v2.nv_chg_cv__rechg         );
+	nv_chg_cv[4] = (u16)(rep_batt_chg.v2.nv_chg_cv__hi_tmp_chg    );
+	nv_chg_cv[5] = (u16)(rep_batt_chg.v2.nv_chg_cv__hi_tmp_rechg  );
+	nv_chg_cv[6] = (u16)(rep_batt_chg.v2.nv_chg_cv__wait_tmp_chg  );
+	nv_chg_cv[7] = (u16)(rep_batt_chg.v2.nv_chg_cv__wait_tmp_rechg);
+	nv_vbatt_lvl_cal_v[0] = rep_batt_chg.v2.nv_vbatt_lvl_cal_v__cal_vbat1;
+	nv_vbatt_lvl_cal_v[1] = rep_batt_chg.v2.nv_vbatt_lvl_cal_v__cal_vbat2;
+	nv_vbatt_thr_cal_v[0] = rep_batt_chg.v2.nv_vbatt_thr_cal_v__cal_temp1;
+	nv_vbatt_thr_cal_v[1] = rep_batt_chg.v2.nv_vbatt_thr_cal_v__cal_temp2;
+
+	{
+		struct power_supply_mv_info info;
+		info.battery_mv    = 0;
+		info.battery_temp  = 0;
+		info.battery_soc   = 0;
+		info.soc_err       = 0;
+		info.camera_temp   = 0;
+		info.illuminometer = 0;
+		info.pa_temp       = 0;
+		info.pa_err        = 0;
+		info.is_chg        = 0;
+
+		msm_batt_get_vbatt_voltage(oled_enable, camera_enable, wimax_enable, &info);
+
+		battery_voltage = info.battery_mv;
+		battery_temp    = info.battery_temp;
+		batt_capacity   = info.battery_soc;
+		camera_temp     = info.camera_temp;
+		illuminometer   = info.illuminometer;
+		soc_err         = info.soc_err;
+		pa_temp         = info.pa_temp;
+		pa_err          = info.pa_err;
+		is_chg          = info.is_chg;
+	}
+
+	DBG_LIMIT("BATT: rcvd: %d, %d; %d, %d; %d, %d; %d, %d; %d, %d, %d\n",
+		 charger_status, charger_type,
+		 battery_status, battery_level,
+		 battery_voltage, battery_temp,
+		 batt_capacity, soc_err,
+		 camera_temp, pa_temp, pa_err);
+
+	switch(charger_type)
+	{
+	case CHARGER_TYPE_USB_PC:
+	case CHARGER_TYPE_USB_WALL:
+	case CHARGER_TYPE_USB_CARKIT:
+	case CHARGER_TYPE_USB_STEREO_EARPHONE:
+	case CHARGER_TYPE_USB_MONAURAL_EARPHONE:
+		msm_batt_info.current_chg_source = USB_CHG;
+		supp = &msm_psy_usb;
+		break;
+
+	case CHARGER_TYPE_WALL:
+		msm_batt_info.current_chg_source = AC_CHG;
+		supp = &msm_psy_ac;
+		break;
+
+	default:
+		msm_batt_info.current_chg_source = 0;
+		supp = &msm_psy_batt;
+		break;
+	}
+
+	if(0 == is_charger_valid)
+	{
+		msm_batt_info.batt_status = POWER_SUPPLY_STATUS_DISCHARGING;
+	}
+	else
+	{
+		if(0 != is_charging)
+		{
+			msm_batt_info.batt_status = POWER_SUPPLY_STATUS_CHARGING;
+		}
+		else
+		{
+			if( (BATTERY_LEVEL_FULL == battery_level) && 
+				(CHARGER_STATUS_GOOD == charger_status) && 
+				(BATTERY_STATUS_GOOD == battery_status) )
+			{
+				msm_batt_info.batt_status = POWER_SUPPLY_STATUS_FULL;
+			}
+			else
+			{
+				msm_batt_info.batt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+			}
+		}
+	}
+
+	if(BATTERY_STATUS_BAD_TEMP == battery_status)
+	{
+		if(25 <= (s32)battery_temp)
+		{
+			msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+		}
+		else
+		{
+			msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_DEAD;
+		}
+	}
+	else if(BATTERY_STATUS_BAD == battery_status)
+	{
+		msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+	}
+	else if(CHARGER_STATUS_BAD == charger_status)
+	{
+		msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
+	}
+	else if(BATTERY_STATUS_GOOD == battery_status)
+	{
+		msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	}
+	else if( (BATTERY_STATUS_INVALID == battery_status) && 
+			 (msm_batt_info.voltage_min_design <= battery_voltage) && (battery_voltage <= msm_batt_info.voltage_max_design) )
+	{
+		msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_GOOD;
+	}
+	else
+	{
+		msm_batt_info.batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
+	}
+
+	if(BATTERY_STATUS_REMOVED == battery_status)
+	{
+		msm_batt_info.batt_valid = 0;
+	}
+	else
+	{
+		msm_batt_info.batt_valid = 1;
+	}
+
+	msm_batt_info.charger_status  = charger_status;
+	msm_batt_info.charger_type    = charger_type;
+	msm_batt_info.battery_status  = battery_status;
+	msm_batt_info.battery_level   = battery_level;
+	msm_batt_info.battery_temp    = battery_temp * 10;
+	msm_batt_info.battery_voltage = battery_voltage * 1000;
+	msm_batt_info.batt_capacity   = batt_capacity;
+	msm_batt_info.camera_temp    = camera_temp;
+	msm_batt_info.illuminometer  = illuminometer;
+	msm_batt_info.soc_err        = soc_err;
+	msm_batt_info.pa_temp        = pa_temp;
+	msm_batt_info.pa_err         = pa_err;
+	msm_batt_info.is_chg         = is_chg;
+
+	if(supp)
+	{
+		msm_batt_info.current_ps = supp;
+		power_supply_changed(supp);
+	}
+
+	msm_batt_save_adjust_nv();
+}
+#else
 static void msm_batt_update_psy_status(void)
 {
 	static u32 unnecessary_event_count;
@@ -655,6 +1110,7 @@ static void msm_batt_update_psy_status(void)
 		power_supply_changed(supp);
 	}
 }
+#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 struct batt_modify_client_req {
@@ -764,9 +1220,15 @@ void msm_batt_early_suspend(struct early_suspend *h)
 	pr_debug("%s: enter\n", __func__);
 
 	if (msm_batt_info.batt_handle != INVALID_BATT_HANDLE) {
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+		rc = msm_batt_modify_client(msm_batt_info.batt_handle,
+				BATTERY_LOW, BATTERY_KC_SLEEP,
+				BATTERY_CB_ID_KC_SLEEP, BATTERY_KC_SLEEP);
+#else
 		rc = msm_batt_modify_client(msm_batt_info.batt_handle,
 				BATTERY_LOW, BATTERY_VOLTAGE_BELOW_THIS_LEVEL,
 				BATTERY_CB_ID_LOW_VOL, BATTERY_LOW);
+#endif
 
 		if (rc < 0) {
 			pr_err("%s: msm_batt_modify_client. rc=%d\n",

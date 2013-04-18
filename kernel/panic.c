@@ -8,6 +8,11 @@
  * This function is used through-out the kernel (including mm and fs)
  * to indicate a major problem.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
+
 #include <linux/debug_locks.h>
 #include <linux/interrupt.h>
 #include <linux/kmsg_dump.h>
@@ -155,6 +160,10 @@ NORET_TYPE void panic(const char * fmt, ...)
 	}
 #endif
 	local_irq_enable();
+
+	printk( KERN_ERR "Kernel panic - exec machine_restart()");
+	machine_restart( "kernel_panic" );
+
 	while (1) {
 		touch_softlockup_watchdog();
 		panic_blink_one_second();

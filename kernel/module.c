@@ -16,6 +16,10 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 #include <linux/module.h>
 #include <linux/moduleloader.h>
 #include <linux/ftrace_event.h>
@@ -58,6 +62,12 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/module.h>
+
+#ifdef CONFIG_SECURITY_KCSYS_INSMOD
+#define INCLUDE_SECURITY_KCSYS
+#undef INCLUDE_SECURITY_KCLSM
+#include <linux/kc_security.h>
+#endif // CONFIG_SECURITY_KCSYS_INSMOD
 
 #if 0
 #define DEBUGP printk
@@ -2113,6 +2123,35 @@ static inline void kmemleak_load_module(struct module *mod, Elf_Ehdr *hdr,
 }
 #endif
 
+
+#ifdef CONFIG_SECURITY_KCSYS_INSMOD
+static int kcsecurity_kcsys_insmod(struct module *mod)
+{
+	int i;
+	bool insmodenable;
+
+	insmodenable = false;
+	for (i=0 ; module_namelist[i] != NULL ; i++){
+		if (strcmp(mod->name, module_namelist[i]) == 0){
+			insmodenable = true;
+			break;
+		}
+	}
+	if (insmodenable){
+		KC_DBGPRINT(KERN_INFO "%s: security Permitted: %s\n", __FUNCTION__, mod->name);
+		return 0;
+	}else{
+		printk(KERN_ERR "%s: security no permission: %s\n", __FUNCTION__, mod->name);
+#ifdef	KCSYS_DEBUG_ENABLE
+		return 0;
+#else
+		return -EPERM;
+#endif	// KCSYS_DEBUG_ENABLE
+	}
+}
+#endif	// CONFIG_SECURITY_KCSYS_INSMOD
+
+
 /* Allocate and load the module: note that size of section 0 is always
    zero, and we rely on this for optional sections. */
 static noinline struct module *load_module(void __user *umod,
@@ -2136,6 +2175,10 @@ static noinline struct module *load_module(void __user *umod,
 	unsigned int num_debug = 0;
 
 	mm_segment_t old_fs;
+
+#ifdef CONFIG_SECURITY_KCSYS_INSMOD
+	int ret
+#endif	// CONFIG_SECURITY_KCSYS_INSMOD
 
 	DEBUGP("load_module: umod=%p, len=%lu, uargs=%p\n",
 	       umod, len, uargs);
@@ -2201,6 +2244,14 @@ static noinline struct module *load_module(void __user *umod,
 	}
 	/* This is temporary: point mod into copy of data. */
 	mod = (void *)sechdrs[modindex].sh_addr;
+
+#ifdef CONFIG_SECURITY_KCSYS_INSMOD
+	ret = kcsecurity_kcsys_insmod(mod);
+	if (ret != 0){
+		err = -ENOEXEC;
+		goto free_hdr;
+	}
+#endif	// CONFIG_SECURITY_KCSYS_INSMOD
 
 	if (symindex == 0) {
 		printk(KERN_WARNING "%s: module has no symbols (stripped?)\n",

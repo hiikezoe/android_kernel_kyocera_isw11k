@@ -15,6 +15,10 @@
  * 02110-1301, USA.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -61,6 +65,8 @@ uint32 mdp_lcdc_underflow_cnt;
 
 boolean mdp_current_clk_on = FALSE;
 boolean mdp_is_in_isr = FALSE;
+
+static boolean mdp_pipe_first_clkon_flg = FALSE;
 
 /*
  * legacy mdp_in_processing is only for DMA2-MDDI
@@ -446,6 +452,9 @@ void mdp_disable_irq_nosync(uint32 term)
 
 void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 {
+
+    DISP_LOCAL_LOG_EMERG("DISP mdp_pipe_kickoff S\n");
+
 	/* complete all the writes before starting */
 	wmb();
 
@@ -521,6 +530,9 @@ void mdp_pipe_kickoff(uint32 term, struct msm_fb_data_type *mfd)
 		outpdw(MDP_BASE + 0x004C, 0x0);
 	}
 #endif
+
+    DISP_LOCAL_LOG_EMERG("DISP mdp_pipe_kickoff E\n");
+
 }
 static int mdp_clk_rate;
 static struct platform_device *pdev_list[MSM_FB_MAX_DEV_LIST];
@@ -634,7 +646,13 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 					pdata = (struct msm_fb_panel_data *)
 						pdev_list[i]->dev.platform_data;
 					if (pdata && pdata->clk_func)
-						pdata->clk_func(0);
+/*						pdata->clk_func(0); */
+                    {
+                        if( TRUE == mdp_pipe_first_clkon_flg )
+                        {
+                            pdata->clk_func(0);
+                        }
+                    }
 				}
 				if (mdp_clk != NULL) {
 					mdp_clk_rate = clk_get_rate(mdp_clk);
@@ -664,7 +682,14 @@ void mdp_pipe_ctrl(MDP_BLOCK_TYPE block, MDP_BLOCK_POWER_STATE state,
 				pdata = (struct msm_fb_panel_data *)
 					pdev_list[i]->dev.platform_data;
 				if (pdata && pdata->clk_func)
-					pdata->clk_func(1);
+/*					pdata->clk_func(1); */
+                {
+                    pdata->clk_func(1);
+                    if ( FALSE == mdp_pipe_first_clkon_flg )
+                    {
+                        mdp_pipe_first_clkon_flg = TRUE;
+                    }
+                }
 			}
 			if (mdp_clk != NULL) {
 				if (mdp_hw_revision <=
@@ -974,6 +999,9 @@ static int mdp_off(struct platform_device *pdev)
 static int mdp_on(struct platform_device *pdev)
 {
 	int ret = 0;
+
+    MSM_FB_DEBUG("mdp_on():start-----\n");
+
 #ifdef CONFIG_FB_MSM_MDP40
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	if (is_mdp4_hw_reset()) {
@@ -987,6 +1015,9 @@ static int mdp_on(struct platform_device *pdev)
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_ON, FALSE);
 	ret = panel_next_on(pdev);
 	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
+
+    MSM_FB_DEBUG("mdp_on():end-----\n");
+
 	return ret;
 }
 
@@ -1283,8 +1314,11 @@ static int mdp_probe(struct platform_device *pdev)
 			/* 15 fps -> 66 msec */
 			mfd->refresh_timer_duration = (66 * HZ / 1000);
 		} else {
+
 			/* 24 fps -> 42 msec */
-			mfd->refresh_timer_duration = (42 * HZ / 1000);
+			/* mfd->refresh_timer_duration = (42 * HZ / 1000); */
+            /* 30 fps -> 33 msec */
+            mfd->refresh_timer_duration = (33 * HZ / 1000);
 		}
 
 #ifdef CONFIG_FB_MSM_MDP22
@@ -1412,21 +1446,21 @@ static int mdp_probe(struct platform_device *pdev)
 #endif
 		break;
 
-	case TV_PANEL:
-#if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_TVOUT)
-		pdata->on = mdp4_atv_on;
-		pdata->off = mdp4_atv_off;
-		mfd->dma_fnc = mdp4_atv_overlay;
-		mfd->dma = &dma_e_data;
-		mdp4_display_intf_sel(EXTERNAL_INTF_SEL, TV_INTF);
-#else
-		pdata->on = mdp_dma3_on;
-		pdata->off = mdp_dma3_off;
-		mfd->hw_refresh = TRUE;
-		mfd->dma_fnc = mdp_dma3_update;
-		mfd->dma = &dma3_data;
-#endif
-		break;
+/* 	case TV_PANEL: */
+/* #if defined(CONFIG_FB_MSM_OVERLAY) && defined(CONFIG_FB_MSM_TVOUT) */
+/*		pdata->on = mdp4_atv_on; */
+/*		pdata->off = mdp4_atv_off; */
+/*		mfd->dma_fnc = mdp4_atv_overlay; */
+/*		mfd->dma = &dma_e_data; */
+/*		mdp4_display_intf_sel(EXTERNAL_INTF_SEL, TV_INTF); */
+/* #else */
+/*		pdata->on = mdp_dma3_on; */
+/*		pdata->off = mdp_dma3_off; */
+/*		mfd->hw_refresh = TRUE; */
+/*		mfd->dma_fnc = mdp_dma3_update; */
+/*		mfd->dma = &dma3_data; */
+/* #endif */
+/*		break; */
 
 	default:
 		printk(KERN_ERR "mdp_probe: unknown device type!\n");

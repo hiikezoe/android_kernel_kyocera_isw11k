@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* drivers/i2c/busses/i2c-msm.c
  *
  * Copyright (C) 2007 Google, Inc.
@@ -13,7 +17,6 @@
  * GNU General Public License for more details.
  *
  */
-
 /* #define DEBUG */
 
 #include <linux/slab.h>
@@ -33,6 +36,13 @@
 #include <linux/pm_qos_params.h>
 #include <mach/gpio.h>
 
+#ifdef CONFIG_MACH_MSM8655_KC_F41_GPIOS
+extern void i2c_compulsory_reset
+(
+ int arg_iSclGpioNo,
+ int arg_iSdaGpioNo
+ );
+#endif
 
 enum {
 	I2C_WRITE_DATA          = 0x00,
@@ -326,6 +336,9 @@ msm_i2c_recover_bus_busy(struct msm_i2c_dev *dev, struct i2c_adapter *adap)
 		       dev->base + I2C_WRITE_DATA);
 	}
 
+#ifdef CONFIG_MACH_MSM8655_KC_F41_GPIOS
+	i2c_compulsory_reset(gpio_clk,gpio_dat);
+#endif
 	for (i = 0; i < 9; i++) {
 		if (gpio_get_value(gpio_dat) && gpio_clk_status)
 			break;

@@ -14,6 +14,7 @@
 #include <linux/fcntl.h>
 #include <linux/security.h>
 
+
 /* Taken over from the old code... */
 
 /* POSIX UID/GID verification for setting inode attributes. */
@@ -142,6 +143,8 @@ void generic_setattr(struct inode *inode, const struct iattr *attr)
 		if (!in_group_p(inode->i_gid) && !capable(CAP_FSETID))
 			mode &= ~S_ISGID;
 		inode->i_mode = mode;
+
+
 	}
 }
 EXPORT_SYMBOL(generic_setattr);

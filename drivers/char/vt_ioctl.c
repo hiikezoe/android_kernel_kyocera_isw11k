@@ -125,6 +125,8 @@ void vt_event_post(unsigned int event, unsigned int old, unsigned int new)
 static void vt_event_wait(struct vt_event_wait *vw)
 {
 	unsigned long flags;
+	int wait_ret = 0;
+	int timer_inval = (100 * HZ)/1000;
 	/* Prepare the event */
 	INIT_LIST_HEAD(&vw->list);
 	vw->done = 0;
@@ -133,7 +135,8 @@ static void vt_event_wait(struct vt_event_wait *vw)
 	list_add(&vw->list, &vt_events);
 	spin_unlock_irqrestore(&vt_event_lock, flags);
 	/* Wait for it to pass */
-	wait_event_interruptible(vt_event_waitqueue, vw->done);
+	wait_ret = wait_event_interruptible_timeout(vt_event_waitqueue, vw->done, timer_inval);
+	/*wait_event_interruptible(vt_event_waitqueue, vw->done);*/
 	/* Dequeue it */
 	spin_lock_irqsave(&vt_event_lock, flags);
 	list_del(&vw->list);

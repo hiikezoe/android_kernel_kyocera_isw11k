@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* arch/arm/mach-msm/smd_private.h
  *
  * Copyright (C) 2007 Google, Inc.
@@ -265,12 +269,28 @@ enum {
 	SMEM_SEFS_INFO,
 	SMEM_RESET_LOG,
 	SMEM_RESET_LOG_SYMBOLS,
+#if defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41)
 	SMEM_MODEM_SW_BUILD_ID,
 	SMEM_SMEM_LOG_MPROC_WRAP,
 	SMEM_BOOT_INFO_FOR_APPS,
+
+	SMEM_FOTA_INFO,
+	SMEM_FACTORY_CMDLINE,
+	SMEM_FACTORY_USB,
+#endif /* defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41) */
 	SMEM_SMSM_SIZE_INFO,
 	SMEM_MEM_LAST = SMEM_SMSM_SIZE_INFO,
 	SMEM_NUM_ITEMS,
+	
+#if defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41)
+  SMEM_KCC_BASE         = 423,
+  SMEM_KERR_LOG         = SMEM_KCC_BASE + 1,
+  SMEM_OSBL_BOOTVER     = SMEM_KCC_BASE + 2,
+  SMEM_OSBL_DNAND_DATA  = SMEM_KCC_BASE + 3,
+  SMEM_OSBL_HKADC_INFO  = SMEM_KCC_BASE + 4,
+  SMEM_NV_DATA          = SMEM_KCC_BASE + 5,
+#endif /* defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41) */
+
 };
 
 enum {
@@ -328,5 +348,9 @@ int smsm_check_for_modem_crash(void);
 void *smem_find(unsigned id, unsigned size);
 void *smem_get_entry(unsigned id, unsigned *size);
 void smd_diag(void);
+
+#if defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41)
+void *kc_smem_alloc(unsigned id, unsigned buf_size);
+#endif /* defined(CONFIG_FEATURE_KCC_F45) || defined(CONFIG_FEATURE_KCC_F41) */
 
 #endif

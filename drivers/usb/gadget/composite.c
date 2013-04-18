@@ -18,6 +18,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 /* #define VERBOSE_DEBUG */
 
 #include <linux/kallsyms.h>
@@ -318,7 +323,7 @@ static int config_buf(struct usb_configuration *config,
 	/* wTotalLength and bNumInterfaces are written later */
 	c->bConfigurationValue = config->bConfigurationValue;
 	c->iConfiguration = config->iConfiguration;
-	c->bmAttributes = USB_CONFIG_ATT_ONE | config->bmAttributes;
+	c->bmAttributes = USB_CONFIG_ATT_ONE;
 	c->bMaxPower = config->bMaxPower ? : (CONFIG_USB_GADGET_VBUS_DRAW / 2);
 
 	/* There may be e.g. OTG descriptors */

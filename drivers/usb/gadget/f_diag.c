@@ -14,6 +14,12 @@
  * GNU General Public License for more details.
  *
  */
+
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -27,9 +33,119 @@
 #include <linux/usb/android_composite.h>
 #include <linux/workqueue.h>
 #include <linux/debugfs.h>
+#include <linux/usb/cdc.h>
+#include <linux/miscdevice.h>
+
+#include "u_serial.h"
 
 static DEFINE_SPINLOCK(ch_lock);
 static LIST_HEAD(usb_diag_ch_list);
+
+#if 1
+static struct usb_cdc_header_desc header_desc = {
+	.bLength            =	sizeof(struct usb_cdc_header_desc),
+	.bDescriptorType    =	0x24,
+	.bDescriptorSubType =	0x00,
+	.bcdCDC             =	__constant_cpu_to_le16(0x0110),
+};
+
+static struct usb_interface_descriptor intf_desc = {
+	.bLength =		USB_DT_INTERFACE_SIZE,
+	.bDescriptorType =	USB_DT_INTERFACE,
+	.bNumEndpoints =	2,
+	.bInterfaceClass =	0x02,
+	.bInterfaceSubClass =	0x0A,
+	.bInterfaceProtocol =	0x01,
+	.iInterface =		0x0,
+};
+
+static struct usb_cdc_mdlm_desc mdlm_desc = {
+	.bLength = sizeof(struct usb_cdc_mdlm_desc),
+	.bDescriptorType = 0x24,
+	.bDescriptorSubType = 0x12,
+	.bcdVersion = __constant_cpu_to_le16(0x0100),
+	.bGUID[0] = 0xC2,
+	.bGUID[1] = 0x29,
+	.bGUID[2] = 0x9F,
+	.bGUID[3] = 0xCC,
+	.bGUID[4] = 0xD4,
+	.bGUID[5] = 0x89,
+	.bGUID[6] = 0x40,
+	.bGUID[7] = 0x66,
+	.bGUID[8] = 0x89,
+	.bGUID[9] = 0x2B,
+	.bGUID[10] = 0x10,
+	.bGUID[11] = 0xC3,
+	.bGUID[12] = 0x41,
+	.bGUID[13] = 0xDD,
+	.bGUID[14] = 0x98,
+	.bGUID[15] = 0xA9,
+};
+
+static struct usb_endpoint_descriptor fs_bulk_in_desc  = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+	.bEndpointAddress =	USB_DIR_IN,
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+};
+
+static struct usb_endpoint_descriptor fs_bulk_out_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+	.bEndpointAddress =	USB_DIR_OUT,
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+};
+
+static struct usb_descriptor_header *fs_diag_desc[] = {
+	(struct usb_descriptor_header *) &intf_desc,
+	(struct usb_descriptor_header *) &header_desc,
+	(struct usb_descriptor_header *) &mdlm_desc,
+	(struct usb_descriptor_header *) &fs_bulk_in_desc,
+	(struct usb_descriptor_header *) &fs_bulk_out_desc,
+	NULL,
+};
+
+static struct usb_endpoint_descriptor hs_bulk_in_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+	.wMaxPacketSize =	__constant_cpu_to_le16(512),
+};
+
+static struct usb_endpoint_descriptor hs_bulk_out_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+	.wMaxPacketSize =	__constant_cpu_to_le16(512),
+};
+
+static struct usb_descriptor_header *hs_diag_desc[] = {
+	(struct usb_descriptor_header *) &intf_desc,
+	(struct usb_descriptor_header *) &header_desc,
+	(struct usb_descriptor_header *) &mdlm_desc,
+	(struct usb_descriptor_header *) &hs_bulk_in_desc,
+	(struct usb_descriptor_header *) &hs_bulk_out_desc,
+	NULL,
+};
+
+static const char cdc_interface[] = "-au ISW11K High Speed Serial Port";
+
+static struct usb_string cdc_interface_string[] = {
+	{0, cdc_interface},
+	{}
+};
+
+static struct usb_gadget_strings cdc_interface_string_table = {
+	.language =		0x0409,
+	.strings =		cdc_interface_string,
+};
+
+static struct usb_gadget_strings *cdc_if_strings[] = {
+	&cdc_interface_string_table,
+	NULL,
+};
+
+#else
 
 static struct usb_interface_descriptor intf_desc = {
 	.bLength            =	sizeof intf_desc,
@@ -88,6 +204,23 @@ static struct usb_descriptor_header *hs_diag_desc[] = {
 	NULL,
 };
 
+#endif
+
+struct gser_descs {
+	struct usb_endpoint_descriptor	*in;
+	struct usb_endpoint_descriptor	*out;
+};
+
+struct f_gser {
+	struct gserial		port;
+	u8			data_id;
+	u8			port_num;
+	struct gser_descs	fs;
+	struct gser_descs	hs;
+	u8			online;
+};
+
+
 /**
  * struct diag_context - USB diag function driver private structure
  * @android_function: Used for registering with Android composite driver
@@ -130,6 +263,144 @@ struct diag_context {
 	unsigned long dpkts_tomodem;
 	unsigned dpkts_tolaptop_pending;
 };
+
+#define	DIAG_MODE	1
+/* diag command device open count */
+static atomic_t		diag_enable; 
+struct f_gser		*g_ser;
+struct diag_context *_diag_dev;
+
+extern int f_diag_mode;
+
+
+static int hs_diag_open(struct inode *ip, struct file *fp)
+{
+	if (atomic_inc_return(&diag_enable) != 1) {
+		atomic_dec(&diag_enable);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static int hs_diag_release(struct inode *ip, struct file *fp)
+{
+	atomic_dec(&diag_enable);
+	return 0;
+}
+
+static ssize_t hs_diag_read(struct file *fp, char __user *buf,
+				size_t count, loff_t *pos)
+{
+	unsigned char sndbuf[12];
+
+	if(!fp || !buf || count < 1)
+		return -EINVAL;
+
+	sprintf(sndbuf, "%d\n", f_diag_mode);
+	if (copy_to_user(buf, sndbuf, 1))
+		return -EFAULT;
+
+	return 1;
+}
+
+static ssize_t hs_diag_write(struct file *fp, const char __user *buf,
+				 size_t count, loff_t *pos)
+{
+	int r = count, xfer=count;
+	int mode;
+	char rbuf[12];
+	struct diag_context *dev = _diag_dev;
+	struct usb_diag_ch *ch;
+	unsigned long flags;
+
+	if(!fp || !buf || count < 1)
+		return -EINVAL;
+	memset(&rbuf,0x0,sizeof(rbuf));
+	while (count > 0) {
+		if (copy_from_user(rbuf, buf, xfer)) {
+			r = -EFAULT;
+			break;
+		}
+		buf += xfer;
+		count -= xfer;
+	}
+
+	mode = rbuf[0] - 0x30;
+	printk("%s: mode %d\n", __func__, mode);
+
+	if ((mode == 0)||(mode == 1)) {
+		if (mode != f_diag_mode) {
+			f_diag_mode = mode;
+			if (g_ser->online == 1 || dev->configured == 1) {
+				if (mode) {
+					if (g_ser->online) {
+						diag_gs_disconnect(&g_ser->port);
+						g_ser->online = 0;
+					}
+					/* set diag context */
+					dev->in->driver_data = dev;
+					dev->out->driver_data = dev;
+
+					if (!dev->configured) {
+						spin_lock_irqsave(&dev->lock, flags);
+						dev->configured = 1;
+						spin_unlock_irqrestore(&dev->lock, flags);
+
+						schedule_work(&dev->config_work);
+
+						list_for_each_entry(ch, &usb_diag_ch_list, list) {
+							struct diag_context *ctxt;
+
+							ctxt = ch->priv_usb;
+							ctxt->dpkts_tolaptop = 0;
+							ctxt->dpkts_tomodem = 0;
+							ctxt->dpkts_tolaptop_pending = 0;
+						}
+					}
+				}
+				else {
+					spin_lock_irqsave(&dev->lock, flags);
+					dev->configured = 0;
+					spin_unlock_irqrestore(&dev->lock, flags);
+					if (dev->ch.notify){
+						dev->ch.notify(dev->ch.priv, USB_DIAG_DISCONNECT, NULL);
+					}
+					g_ser->port.in->driver_data = dev->cdev;
+					g_ser->port.out->driver_data = dev->cdev;
+					
+					if (g_ser->port.in->driver_data) {
+						diag_gs_disconnect(&g_ser->port);
+					}
+					if (!diag_gs_connect(&g_ser->port, g_ser->port_num)) {
+						g_ser->online = 1;
+					}
+				}
+			}
+		}
+	} else {
+		r = -EINVAL;
+	}
+
+	return r;
+}
+
+static const char shortname[] = "diagmode";
+
+static struct file_operations hs_diag_fops = {
+	.owner = THIS_MODULE,
+	.read = hs_diag_read,
+	.write = hs_diag_write,
+	.open = hs_diag_open,
+	.release = hs_diag_release,
+};
+
+static struct miscdevice hs_diag_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = shortname,
+	.fops = &hs_diag_fops,
+};
+
 
 static inline struct diag_context *func_to_dev(struct usb_function *f)
 {
@@ -303,12 +574,14 @@ void usb_diag_free_req(struct usb_diag_ch *ch)
 	if (!ctxt)
 		return;
 
+	usb_ep_fifo_flush(ctxt->in);
 	list_for_each_safe(act, tmp, &ctxt->write_pool) {
 		req = list_entry(act, struct usb_request, list);
 		list_del(&req->list);
 		usb_ep_free_request(ctxt->in, req);
 	}
 
+	usb_ep_fifo_flush(ctxt->out);
 	list_for_each_safe(act, tmp, &ctxt->read_pool) {
 		req = list_entry(act, struct usb_request, list);
 		list_del(&req->list);
@@ -381,36 +654,39 @@ int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 	unsigned long flags;
 	struct usb_request *req;
 
-	spin_lock_irqsave(&ctxt->lock, flags);
+	if (f_diag_mode) {
 
-	if (!ctxt->configured) {
-		spin_unlock_irqrestore(&ctxt->lock, flags);
-		return -EIO;
-	}
-
-	if (list_empty(&ctxt->read_pool)) {
-		spin_unlock_irqrestore(&ctxt->lock, flags);
-		ERROR(ctxt->cdev, "%s: no requests available\n", __func__);
-		return -EAGAIN;
-	}
-
-	req = list_first_entry(&ctxt->read_pool, struct usb_request, list);
-	list_del(&req->list);
-	spin_unlock_irqrestore(&ctxt->lock, flags);
-
-	req->buf = d_req->buf;
-	req->length = d_req->length;
-	req->context = d_req;
-	if (usb_ep_queue(ctxt->out, req, GFP_ATOMIC)) {
-		/* If error add the link to linked list again*/
 		spin_lock_irqsave(&ctxt->lock, flags);
-		list_add_tail(&req->list, &ctxt->read_pool);
-		spin_unlock_irqrestore(&ctxt->lock, flags);
-		ERROR(ctxt->cdev, "%s: cannot queue"
-				" read request\n", __func__);
-		return -EIO;
-	}
 
+		if (!ctxt->configured) {
+			spin_unlock_irqrestore(&ctxt->lock, flags);
+			return -EIO;
+		}
+
+		if (list_empty(&ctxt->read_pool)) {
+			spin_unlock_irqrestore(&ctxt->lock, flags);
+			ERROR(ctxt->cdev, "%s: no requests available\n", __func__);
+			return -EAGAIN;
+		}
+
+		req = list_first_entry(&ctxt->read_pool, struct usb_request, list);
+		list_del(&req->list);
+		spin_unlock_irqrestore(&ctxt->lock, flags);
+
+		req->buf = d_req->buf;
+		req->length = d_req->length;
+		req->context = d_req;
+		if (usb_ep_queue(ctxt->out, req, GFP_ATOMIC)) {
+			/* If error add the link to linked list again*/
+			spin_lock_irqsave(&ctxt->lock, flags);
+			list_add_tail(&req->list, &ctxt->read_pool);
+			spin_unlock_irqrestore(&ctxt->lock, flags);
+			ERROR(ctxt->cdev, "%s: cannot queue"
+					" read request\n", __func__);
+			return -EIO;
+		}
+
+	}
 	return 0;
 }
 EXPORT_SYMBOL(usb_diag_read);
@@ -478,19 +754,24 @@ static void diag_function_disable(struct usb_function *f)
 
 	DBG(dev->cdev, "diag_function_disable\n");
 
-	spin_lock_irqsave(&dev->lock, flags);
-	dev->configured = 0;
-	spin_unlock_irqrestore(&dev->lock, flags);
+	if (f_diag_mode) {
+		spin_lock_irqsave(&dev->lock, flags);
+		dev->configured = 0;
+		spin_unlock_irqrestore(&dev->lock, flags);
 
-	if (dev->ch.notify)
-		dev->ch.notify(dev->ch.priv, USB_DIAG_DISCONNECT, NULL);
+		if (dev->ch.notify)
+			dev->ch.notify(dev->ch.priv, USB_DIAG_DISCONNECT, NULL);
 
-	usb_ep_disable(dev->in);
-	dev->in->driver_data = NULL;
+		usb_ep_disable(dev->in);
+		dev->in->driver_data = NULL;
 
-	usb_ep_disable(dev->out);
-	dev->out->driver_data = NULL;
+		usb_ep_disable(dev->out);
+		dev->out->driver_data = NULL;
 
+	} else {
+		gserial_disconnect(&g_ser->port);
+		g_ser->online = 0;
+	}
 }
 
 static int diag_function_set_alt(struct usb_function *f,
@@ -505,36 +786,50 @@ static int diag_function_set_alt(struct usb_function *f,
 	dev->in_desc = ep_choose(cdev->gadget,
 			&hs_bulk_in_desc, &fs_bulk_in_desc);
 	dev->out_desc = ep_choose(cdev->gadget,
-			&hs_bulk_out_desc, &fs_bulk_in_desc);
-	dev->in->driver_data = dev;
-	rc = usb_ep_enable(dev->in, dev->in_desc);
-	if (rc) {
-		ERROR(dev->cdev, "can't enable %s, result %d\n",
-						dev->in->name, rc);
-		return rc;
-	}
-	dev->out->driver_data = dev;
-	rc = usb_ep_enable(dev->out, dev->out_desc);
-	if (rc) {
-		ERROR(dev->cdev, "can't enable %s, result %d\n",
-						dev->out->name, rc);
-		usb_ep_disable(dev->in);
-		return rc;
-	}
-	schedule_work(&dev->config_work);
+			&hs_bulk_out_desc, &fs_bulk_out_desc);
+	g_ser->port.in_desc = dev->in_desc;
+	g_ser->port.out_desc = dev->out_desc;
 
-	list_for_each_entry(ch, &usb_diag_ch_list, list) {
-		struct diag_context *ctxt;
+	if (f_diag_mode) {
+		dev->in->driver_data = dev;
+		rc = usb_ep_enable(dev->in, dev->in_desc);
+		if (rc) {
+			ERROR(dev->cdev, "can't enable %s, result %d\n",
+							dev->in->name, rc);
+			return rc;
+		}
+		dev->out->driver_data = dev;
+		rc = usb_ep_enable(dev->out, dev->out_desc);
+		if (rc) {
+			ERROR(dev->cdev, "can't enable %s, result %d\n",
+							dev->out->name, rc);
+			usb_ep_disable(dev->in);
+			return rc;
+		}
+		schedule_work(&dev->config_work);
 
-		ctxt = ch->priv_usb;
-		ctxt->dpkts_tolaptop = 0;
-		ctxt->dpkts_tomodem = 0;
-		ctxt->dpkts_tolaptop_pending = 0;
+		list_for_each_entry(ch, &usb_diag_ch_list, list) {
+			struct diag_context *ctxt;
+
+			ctxt = ch->priv_usb;
+			ctxt->dpkts_tolaptop = 0;
+			ctxt->dpkts_tomodem = 0;
+			ctxt->dpkts_tolaptop_pending = 0;
+		}
+
+		spin_lock_irqsave(&dev->lock, flags);
+		dev->configured = 1;
+		spin_unlock_irqrestore(&dev->lock, flags);
+	} else {
+	        if (g_ser->port.in->driver_data) {
+	                DBG(cdev, "reset generic data ttyGS%d\n", g_ser->port_num);
+	                gserial_disconnect(&g_ser->port);
+	        } else {
+	                DBG(cdev, "activate lismo ttyGS%d\n", g_ser->port_num);
+	        }
+	        gserial_connect(&g_ser->port, g_ser->port_num);
+	        g_ser->online = 1;
 	}
-
-	spin_lock_irqsave(&dev->lock, flags);
-	dev->configured = 1;
-	spin_unlock_irqrestore(&dev->lock, flags);
 
 	return rc;
 }
@@ -543,6 +838,8 @@ static void diag_function_unbind(struct usb_configuration *c,
 		struct usb_function *f)
 {
 	struct diag_context *ctxt = func_to_dev(f);
+
+	misc_deregister(&hs_diag_device);
 
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
@@ -560,19 +857,33 @@ static int diag_function_bind(struct usb_configuration *c,
 	int status = -ENODEV;
 
 	intf_desc.bInterfaceNumber =  usb_interface_id(c, f);
+	g_ser->data_id = intf_desc.bInterfaceNumber;
 
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_bulk_in_desc);
 	ctxt->in = ep;
-	ep->driver_data = ctxt;
+	g_ser->port.in = ep;
+	if (f_diag_mode) 
+		ep->driver_data = ctxt;
+	else
+		ep->driver_data = ctxt->cdev;
 
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_bulk_out_desc);
 	ctxt->out = ep;
-	ep->driver_data = ctxt;
+	g_ser->port.out = ep;
+	if (f_diag_mode) 
+		ep->driver_data = ctxt;
+	else
+		ep->driver_data = ctxt->cdev;
 
 	/* copy descriptors, and track endpoint copies */
 	f->descriptors = usb_copy_descriptors(fs_diag_desc);
 	if (!f->descriptors)
 		goto fail;
+
+	g_ser->fs.in = usb_find_endpoint(fs_diag_desc,
+			f->descriptors, &fs_bulk_in_desc);
+	g_ser->fs.out = usb_find_endpoint(fs_diag_desc,
+			f->descriptors, &fs_bulk_out_desc);
 
 	if (gadget_is_dualspeed(c->cdev->gadget)) {
 		hs_bulk_in_desc.bEndpointAddress =
@@ -582,6 +893,11 @@ static int diag_function_bind(struct usb_configuration *c,
 
 		/* copy descriptors, and track endpoint copies */
 		f->hs_descriptors = usb_copy_descriptors(hs_diag_desc);
+
+		g_ser->hs.in = usb_find_endpoint(hs_diag_desc,
+				f->hs_descriptors, &hs_bulk_in_desc);
+		g_ser->hs.out = usb_find_endpoint(hs_diag_desc,
+				f->hs_descriptors, &hs_bulk_out_desc);
 	}
 	return 0;
 fail:
@@ -598,6 +914,7 @@ int diag_function_add(struct usb_configuration *c)
 	struct diag_context *dev;
 	struct usb_diag_ch *_ch;
 	int found = 0, ret;
+	int rc;
 
 	DBG(c->cdev, "diag_function_add\n");
 
@@ -619,6 +936,7 @@ int diag_function_add(struct usb_configuration *c)
 
 	dev->cdev = c->cdev;
 	dev->function.name = _ch->name;
+	dev->function.strings = cdc_if_strings;
 	dev->function.descriptors = fs_diag_desc;
 	dev->function.hs_descriptors = hs_diag_desc;
 	dev->function.bind = diag_function_bind;
@@ -630,12 +948,39 @@ int diag_function_add(struct usb_configuration *c)
 	INIT_LIST_HEAD(&dev->write_pool);
 	INIT_WORK(&dev->config_work, usb_config_work_func);
 
+	rc = usb_string_id(c->cdev);
+	if (unlikely(rc < 0)) {
+		return -ENODEV;
+	}
+	cdc_interface_string[0].id = rc;
+	intf_desc.iInterface = rc;
+
+	/* allocate and initialize one new instance */
+	g_ser = kzalloc(sizeof *g_ser, GFP_KERNEL);
+	if (!g_ser)
+		return -ENOMEM;
+	g_ser->port_num = 0;
+
+	ret = gserial_setup(c->cdev->gadget, 1);
+	if (ret) {
+		ret = -EIO;
+		printk("%s: unable to high speed initialize\n",__func__);
+		goto err1;
+	}
+
+	ret = misc_register(&hs_diag_device);
+	if (ret) {
+		ret = -EIO;
+		printk("%s: unable to misc device register\n",__func__);
+		goto err1;
+	}
 	ret = usb_add_function(c, &dev->function);
 	if (ret) {
 		INFO(c->cdev, "usb_add_function failed\n");
 		_ch->priv_usb = NULL;
 	}
 
+err1:
 	return ret;
 }
 
@@ -739,6 +1084,7 @@ usb_diag_ch *diag_setup(struct usb_diag_platform_data *pdata)
 		fdiag_debugfs_init();
 	}
 
+	_diag_dev = ctxt;
 	return ch;
 }
 

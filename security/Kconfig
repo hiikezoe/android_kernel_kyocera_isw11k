@@ -39,6 +39,38 @@ config KEYS_DEBUG_PROC_KEYS
 
 	  If you are unsure as to whether this is required, answer N.
 
+config KEYS_QUOTA_ROOT_MAX_KEYS
+	int "Root key count quota"
+	default 200
+	depends on KEYS
+	help
+	  This option changes the maximum number of keys root can allocate
+	  the default is 200.
+
+config KEYS_QUOTA_ROOT_MAX_BYTES
+	int "Root key space quota in bytes"
+	default 20000
+	depends on KEYS
+	help
+	  This option changes the maximum number of bytes root can allocate
+	  the default is 20000.
+
+config KEYS_QUOTA_MAX_KEYS
+	int "General key count quota"
+	default 200
+	depends on KEYS
+	help
+	  This option changes the maximum number of gernal keys that can be
+	  allocated the default is 200.
+
+config KEYS_QUOTA_MAX_BYTES
+	int "General key space quota in bytes"
+	default 20000
+	depends on KEYS
+	help
+	  This option changes the maximum number of bytes that can be generally
+	  allocated the default is 20000.
+
 config SECURITY
 	bool "Enable different security models"
 	depends on SYSFS
@@ -148,6 +180,97 @@ config ENABLE_ROMLITE
 	  load/read/write data to the protected applications inside TrustZone.
 
 	  TrustZone is a registered trademark of ARM holding.
+
+config SECURITY_KCLSM
+	bool "KCLSM LSM Support"
+	depends on SECURITY
+	default y
+	help
+	  This is a KCLSM LSM module.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_PTRACE
+	bool "KCLSM LSM ptrace_access_check Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default n
+	help
+	  This is a KCLSM LSM ptrace_access_check module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_MOUNT_DEVICE
+	bool "KCLSM LSM sb_mount device permission Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default y
+	help
+	  This is a KCLSM LSM device permission with sb_mount module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_MOUNT_REMOUNT
+	bool "KCLSM LSM sb_mount remount permission Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default y
+	help
+	  This is a KCLSM LSM remount permission with sb_mount module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_UMOUNT
+	bool "KCLSM LSM sb_umount Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default y
+	help
+	  This is a KCLSM LSM sb_umount module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_PIVOTROOT
+	bool "KCLSM LSM sb_pivotroot Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default y
+	help
+	  This is a KCLSM LSM sb_pivotroot module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_CHROOT
+	bool "KCLSM LSM path_chroot Support"
+	depends on SECURITY && SECURITY_KCLSM && SECURITY_PATH
+	default y
+	help
+	  This is a KCLSM LSM path_chroot module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCLSM_DEVICEFILEPERMISSION
+	bool "KCLSM LSM path_mknod path_chmod path_chown Support"
+	depends on SECURITY && SECURITY_KCLSM && SECURITY_PATH
+	default y
+	help
+	  This is a KCLSM LSM path_mknod path_chmod path_chown module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCSYS_INSMOD
+	bool "insmod system call security Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default y
+	help
+	  This is a insmod system call security module Support.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_KCSYS_PTRACE
+	bool "ptrace system call security Support"
+	depends on SECURITY && SECURITY_KCLSM
+	default y
+	help
+	  This is a ptrace system call security Support.
+
+	  If you are unsure how to answer this question, answer N.
+
 
 source security/selinux/Kconfig
 source security/smack/Kconfig

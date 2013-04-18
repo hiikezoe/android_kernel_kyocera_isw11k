@@ -23,6 +23,8 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
 
+#include <linux/wifi_power.h>
+
 /* Libra SDIO function device */
 static struct sdio_func *libra_sdio_func;
 static struct mmc_host *libra_mmc_host;
@@ -33,6 +35,14 @@ static unsigned short  libra_sdio_card_id;
 
 static suspend_handler_t *libra_suspend_hldr;
 static resume_handler_t *libra_resume_hldr;
+
+
+void libra_sdio_set_wifi_power(int power)
+{
+	mmc_set_wifi_power(power);
+}
+EXPORT_SYMBOL(libra_sdio_set_wifi_power);
+
 
 /**
  * libra_sdio_configure() - Function to configure the SDIO device param

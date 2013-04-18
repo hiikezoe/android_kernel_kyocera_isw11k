@@ -90,6 +90,7 @@ generic_acl_set(struct dentry *dentry, const char *name, const void *value,
 		switch (type) {
 		case ACL_TYPE_ACCESS:
 			mode = inode->i_mode;
+
 			error = posix_acl_equiv_mode(acl, &mode);
 			if (error < 0)
 				goto failed;
@@ -130,6 +131,7 @@ generic_acl_init(struct inode *inode, struct inode *dir)
 	inode->i_mode = mode & ~current_umask();
 	if (!S_ISLNK(inode->i_mode))
 		acl = get_cached_acl(dir, ACL_TYPE_DEFAULT);
+
 	if (acl) {
 		struct posix_acl *clone;
 
@@ -148,6 +150,7 @@ generic_acl_init(struct inode *inode, struct inode *dir)
 		error = posix_acl_create_masq(clone, &mode);
 		if (error >= 0) {
 			inode->i_mode = mode;
+
 			if (error > 0)
 				set_cached_acl(inode, ACL_TYPE_ACCESS, clone);
 		}

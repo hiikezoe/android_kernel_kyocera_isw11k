@@ -302,9 +302,9 @@ kgsl_ptpool_get(struct kgsl_memdesc *memdesc)
 	spin_lock_irqsave(&kgsl_driver.ptpool.lock, flags);
 
 	pt = find_next_zero_bit(kgsl_driver.ptpool.bitmap,
-				kgsl_pagetable_count, 0);
+				KGSL_PAGETABLE_COUNT, 0);
 
-	if (pt >= kgsl_pagetable_count) {
+	if (pt >= KGSL_PAGETABLE_COUNT) {
 		spin_unlock_irqrestore(&kgsl_driver.ptpool.lock, flags);
 		return -ENOMEM;
 	}
@@ -771,10 +771,6 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 			KGSL_CORE_ERR("Unable to find physaddr for"
 				"address: %x\n", address);
 			spin_unlock(&pagetable->lock);
-			/* Increase the stats here for proper accounting in
-			kgsl_mmu_unmap */
-			pagetable->stats.entries += 1;
-			pagetable->stats.mapped += alloc_size;
 			kgsl_mmu_unmap(pagetable, *gpuaddr, range);
 			return -EFAULT;
 		}

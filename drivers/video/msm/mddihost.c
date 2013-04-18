@@ -15,6 +15,10 @@
  * 02110-1301, USA.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -35,6 +39,8 @@
 #include <mach/clk.h>
 
 struct semaphore mddi_host_mutex;
+
+struct semaphore disp_local_mutex;
 
 struct clk *mddi_io_clk;
 static boolean mddi_host_powered = FALSE;
@@ -94,7 +100,7 @@ extern void mddi_hitachi_window_adjust(uint16 x1,
 				       uint16 x2, uint16 y1, uint16 y2);
 #endif
 
-extern void mddi_toshiba_lcd_init(void);
+/* extern void mddi_toshiba_lcd_init(void); */
 
 #ifdef FEATURE_MDDI_S6D0142
 extern void mddi_s6d0142_lcd_init(void);
@@ -107,12 +113,17 @@ extern void mddi_s6d0142_window_adjust(uint16 x1,
 
 void mddi_init(void)
 {
+
+    MSM_FB_DEBUG("mddi_init() start-----\n");
+
 	if (mddi_host_initialized)
 		return;
 
 	mddi_host_initialized = TRUE;
 
 	init_MUTEX(&mddi_host_mutex);
+
+  init_MUTEX(&disp_local_mutex);
 
 	if (!mddi_host_powered) {
 		down(&mddi_host_mutex);
@@ -121,7 +132,11 @@ void mddi_init(void)
 		up(&mddi_host_mutex);
 		mdelay(10);
 	}
+
+    MSM_FB_DEBUG(KERN_ERR "mddi_init() end-----\n");
+
 }
+
 
 int mddi_host_register_read(uint32 reg_addr,
      uint32 *reg_value_ptr, boolean wait, mddi_host_type host) {
@@ -221,6 +236,7 @@ int mddi_host_register_write(uint32 reg_addr,
 		MDDI_MSG_ERR("MDDI powered down!\n");
 		mddi_init();
 	}
+
 
 	down(&mddi_host_mutex);
 
@@ -391,7 +407,18 @@ boolean mddi_host_register_write_int
 
 void mddi_wait(uint16 time_ms)
 {
+
+    MDDI_MSG_DEBUG("%s : %dms --------\n",__func__,time_ms);
+
+    if ( 5 >= time_ms )
+    {
 	mdelay(time_ms);
+    }
+    else
+    {
+        msleep(time_ms);
+    }
+
 }
 
 void mddi_client_lcd_vsync_detected(boolean detected)

@@ -2,6 +2,11 @@
 # Makefile for the kernel security code
 #
 
+# For kclsm.c, kclsm enable only user build.
+ifneq ($(TARGET_BUILD_VARIANT),user)
+  KBUILD_CFLAGS += -DKCLSM_DEBUG_ENABLE
+endif
+
 obj-$(CONFIG_KEYS)			+= keys/
 subdir-$(CONFIG_SECURITY_SELINUX)	+= selinux
 subdir-$(CONFIG_SECURITY_SMACK)		+= smack
@@ -19,6 +24,7 @@ obj-$(CONFIG_SECURITY_SELINUX)		+= selinux/built-in.o
 obj-$(CONFIG_SECURITY_SMACK)		+= smack/built-in.o
 obj-$(CONFIG_AUDIT)			+= lsm_audit.o
 obj-$(CONFIG_SECURITY_TOMOYO)		+= tomoyo/built-in.o
+obj-$(CONFIG_SECURITY_KCLSM)		+= kclsm.o
 obj-$(CONFIG_CGROUP_DEVICE)		+= device_cgroup.o
 
 # Object integrity file lists

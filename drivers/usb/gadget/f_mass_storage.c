@@ -267,10 +267,13 @@
  * of the Gadget, USB Mass Storage, and SCSI protocols.
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
 
 /* #define VERBOSE_DEBUG */
 /* #define DUMP_MSGS */
-
 
 #include <linux/blkdev.h>
 #include <linux/completion.h>
@@ -299,6 +302,15 @@
 #include <linux/usb/android_composite.h>
 #include <linux/platform_device.h>
 #endif
+#include <linux/miscdevice.h>
+#include <asm/uaccess.h>
+#include <linux/errno.h>
+#include <linux/ioctl.h>
+#include <linux/module.h>
+#include <linux/poll.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
+#include <linux/usb/f_mass_ioctl.h>
 
 static ulong fsg_nofua = 1;
 module_param(fsg_nofua, ulong, S_IRUGO);
@@ -327,7 +339,7 @@ static int csw_hack_sent;
 /*-------------------------------------------------------------------------*/
 
 struct fsg_dev;
-
+struct unq_vendor_info;
 
 /* Data shared by all the FSG instances. */
 struct fsg_common {
@@ -390,6 +402,7 @@ struct fsg_common {
 	char inquiry_string[8 + 16 + 4 + 1];
 
 	struct kref		ref;
+	struct unq_vendor_info*	unq_vendor;
 };
 
 
@@ -446,6 +459,64 @@ struct fsg_dev {
 	struct switch_dev	 sdev;
 };
 
+
+/* #define VENDOR_UNIQ_DEBUG_ON */
+#ifdef VENDOR_UNIQ_DEBUG_ON
+#define VUNIQ_ERR(stuff...)	printk("vuniq: "stuff)
+#define VUNIQ_DBG(stuff...)	printk("vuniq: "stuff)
+#define VUNIQ_DUMP(buf, length) print_hex_dump(KERN_DEBUG, "vuniq: ",  \
+					DUMP_PREFIX_OFFSET,         \
+					16, 1, buf, length, 0)
+#else
+#define VUNIQ_ERR(stuff...)	printk("vuniq: "stuff)
+#define VUNIQ_DBG(stuff...)     do { } while (0)
+#define VUNIQ_DUMP(buf, size)   do { } while (0)
+
+#endif
+
+static int vender_unique_command(struct fsg_common *common,
+		struct fsg_buffhd *bh, int32_t* reply_ptr);
+static int usbmass_open(struct inode *inode, struct file *filp);
+static unsigned int  usbmass_poll(struct file *filp, poll_table *wait);
+static int usbmass_ioctl(struct inode *inode,
+		struct file *filp, uint32_t cmd, u_long arg);
+static const struct file_operations usbmass_fops = {
+	.owner = THIS_MODULE,
+	.poll = usbmass_poll,
+	.open = usbmass_open,
+	.ioctl = usbmass_ioctl,
+};
+static struct miscdevice usbmass_dev_misc = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "usbmass",
+	.fops = &usbmass_fops,
+};
+struct usbmass_device {
+	spinlock_t          lock;
+	wait_queue_head_t   rwait;
+	wait_queue_head_t   wwait;
+	int rcomplete;
+	int wcomplete;
+	int connect_chg;
+};
+
+enum vendor_sequence {
+	VSEQ_NONE,
+	VSEQ_IO_EVENT_WAIT,
+	VSEQ_TX_DATA,
+	VSEQ_RX_DATA,
+	VSEQ_DO_READ,
+	VSEQ_DO_WRITE,
+	VSEQ_NO_DATA,
+	VSEQ_INVALID_CMD,
+	VSEQ_ERROR,
+};
+struct unq_vendor_info {
+	enum vendor_sequence vseq;
+	int vendor_exit;
+};
+struct usbmass_device usbmass_dev;
+struct ioc_startinfo_type* g_vendor_info = NULL;
 
 static inline int __fsg_is_set(struct fsg_common *common,
 			       const char *func, unsigned line)
@@ -852,8 +923,123 @@ static int do_read(struct fsg_common *common)
 	return -EIO;		/* No default reply */
 }
 
+/* [ADD START] 2011/04/15 KDDI : vender read command */
+/*-------------------------------------------------------------------------*/
+static int do_read_buffer(struct fsg_common *common)
+{
+	struct fsg_lun		*curlun = common->curlun;
+	struct fsg_buffhd	*bh;
+	int			rc;
+	u32			amount_left;
+	loff_t			file_offset;
+	unsigned int		amount;
+	struct op_desc		*desc = 0;
+
+	file_offset = get_unaligned_be32(&common->cmnd[2]);
+
+	/* Get the starting Logical Block Address and check that it's
+	 * not too big */
+//	printk("%s: cmd=%d\n", __func__, common->cmnd[0]);
+	desc = curlun->op_desc[common->cmnd[0]-SC_VENDOR_START];
+	if (!desc->buffer){
+		printk("%s: cmd=%d not ready\n", __func__, common->cmnd[0]);
+		curlun->sense_data =
+				SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+		curlun->sense_data_info = file_offset;
+		curlun->info_valid = 1;
+/* [ADD START] 2011/09/30 KDDI : no response set */
+		bh = common->next_buffhd_to_fill;
+		bh->inreq->length = 0;
+		bh->state = BUF_STATE_FULL;
+/* [ADD END] 2011/09/30 KDDI : no responsea set */
+		return -EIO;		/* No default reply */
+	}
+
+
+	/* Carry out the file reads */
+	amount_left = common->data_size_from_cmnd;
+
+/* [ADD START] 2011/09/30 KDDI : check offset before read data */
+	if (file_offset + amount_left > desc->len) {
+		printk("[fms_CR6]%s: vendor buffer out of range offset=0x%x read-len=0x%x buf-len=0x%x\n",
+		__func__, (unsigned int)file_offset, amount_left, desc->len);
+		curlun->sense_data =
+				SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+		curlun->sense_data_info = file_offset;
+		curlun->info_valid = 1;
+		bh = common->next_buffhd_to_fill;
+		bh->inreq->length = 0;
+		bh->state = BUF_STATE_FULL;
+		return -EIO;		/* No default reply */
+	}
+/* [ADD END] 2011/09/30 KDDI : check offset before read data */
+
+//	printk("[fms_CR6]%s: amount_left=%x\n", __func__, amount_left);
+	if (unlikely(amount_left == 0))
+		return -EIO;		/* No default reply */
+
+//	printk("[fms_CR6]%s: buf_size=%x\n", __func__, common->buf_size);
+
+	for (;;) {
+//		printk("[fms_CR6]%s: file_offset=%x\n", __func__, (unsigned int)file_offset);
+
+		/* Figure out how much we need to read:
+		 * Try to read the remaining amount.
+		 * But don't read more than the buffer size.
+		 * And don't try to read past the end of the file.
+		 * Finally, if we're not at a page boundary, don't read past
+		 *	the next page.
+		 * If this means reading 0 then we were asked to read past
+		 *	the end of file. */
+		amount = min(amount_left, FSG_BUFLEN);
+		amount = min((loff_t) amount, desc->len - file_offset);
+//		printk("[fms_CR6]%s: amount=%x\n", __func__, amount);
+
+		/* Wait for the next buffer to become available */
+		bh = common->next_buffhd_to_fill;
+		while (bh->state != BUF_STATE_EMPTY) {
+			rc = sleep_thread(common);
+			if (rc)
+				return rc;
+		}
+//		printk("[fms_CR6]%s: wait buffer ok\n", __func__);
+
+		/* If we were asked to read past the end of file,
+		 * end with an empty buffer. */
+		if (amount == 0) {
+			curlun->sense_data =
+					SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+			curlun->sense_data_info = file_offset;
+			curlun->info_valid = 1;
+			bh->inreq->length = 0;
+			bh->state = BUF_STATE_FULL;
+			break;
+		}
+
+		memcpy((char __user *) bh->buf, desc->buffer + file_offset, amount);
+
+		file_offset  += amount;
+		amount_left  -= amount;
+		common->residue -= amount;
+		bh->inreq->length = amount;
+		bh->state = BUF_STATE_FULL;
+
+		if (amount_left == 0)
+			break;		/* No more left to read */
+
+		/* Send this buffer and go read some more */
+		START_TRANSFER_OR(common, bulk_in, bh->inreq,
+				&bh->inreq_busy, &bh->state)
+			/* Don't know what to do if
+			 * common->fsg is NULL */
+			return -EIO;
+		common->next_buffhd_to_fill = bh->next;
+	}
+	return -EIO;		/* No default reply */
+}
 
 /*-------------------------------------------------------------------------*/
+/* [ADD END] 2011/04/15 KDDI : vender read command*/
 
 static int do_write(struct fsg_common *common)
 {
@@ -1086,6 +1272,153 @@ write_error:
 }
 
 
+/* [ADD START] 2011/04/15 KDDI : vender write command */
+/* [CHANGE START] 2011/05/27 KDDI : [offset]use change */
+/*-------------------------------------------------------------------------*/
+
+static int do_write_buffer(struct fsg_common *common)
+{
+	struct fsg_lun		*curlun = common->curlun;
+	struct fsg_buffhd	*bh;
+	int			get_some_more;
+	u32			amount_left_to_req, amount_left_to_write;
+	loff_t			file_offset;
+	unsigned int		amount;
+	int			rc;
+	struct op_desc		*desc = 0;
+
+	get_some_more = 1;
+	file_offset = get_unaligned_be32(&common->cmnd[2]);
+
+//	printk("[fms_CR6]%s: cmd=%d\n", __func__, common->cmnd[0]);
+	desc = curlun->op_desc[common->cmnd[0]-SC_VENDOR_START];
+	if (!desc->buffer){
+		printk("[fms_CR6]%s: cmd=%d not ready\n", __func__, common->cmnd[0]);
+		curlun->sense_data =
+				SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+		curlun->sense_data_info = file_offset;
+		curlun->info_valid = 1;
+		return -EIO;		/* No default reply */
+	}
+
+	amount_left_to_req = amount_left_to_write = common->data_size_from_cmnd;
+//	printk("[fms_CR6]%s: amount_left_to_write=%d\n", __func__, amount_left_to_write);
+//	printk("[fms_CR6]%s: file_offset=%x\n", __func__, (unsigned int)file_offset);
+//	printk("[fms_CR6]%s: desc->len=%x\n", __func__, desc->len);
+	if (file_offset + amount_left_to_write > desc->len) {
+		printk("[fms_CR6]%s: vendor buffer out of range offset=0x%x write-len=0x%x buf-len=0x%x\n",
+			__func__, (unsigned int)file_offset, amount_left_to_req, desc->len);
+		curlun->sense_data =
+				SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+		curlun->sense_data_info = file_offset;
+		curlun->info_valid = 1;
+		return -EIO;		/* No default reply */
+	}
+
+	while (amount_left_to_write > 0) {
+
+		/* Queue a request for more data from the host */
+		bh = common->next_buffhd_to_fill;
+		if (bh->state == BUF_STATE_EMPTY && get_some_more) {
+
+			/* Figure out how much we want to get:
+			 * Try to get the remaining amount.
+			 * But don't get more than the buffer size.
+			 * And don't try to go past the end of the file.
+			 * If we're not at a page boundary,
+			 *	don't go past the next page.
+			 * If this means getting 0, then we were asked
+			 *	to write past the end of file.
+			 * Finally, round down to a block boundary. */
+			amount = min(amount_left_to_req, FSG_BUFLEN);
+//	printk("[fms_CR6]%s: (2)amount=0x%x\n", __func__, amount);
+
+			/* Get the next buffer */
+			common->usb_amount_left -= amount;
+			amount_left_to_req -= amount;
+			if (amount_left_to_req == 0)
+				get_some_more = 0;
+
+//	printk("[fms_CR6]%s: (3)amount=0x%x\n", __func__, amount);
+//	printk("[fms_CR6]%s: (3)amount_left_to_req=0x%x\n", __func__, amount_left_to_req);
+//	printk("[fms_CR6]%s: (3)get_some_more=%d bh->state =%d \n", __func__,get_some_more,bh->state);
+
+			/* amount is always divisible by 512, hence by
+			 * the bulk-out maxpacket size */
+			bh->outreq->length = bh->bulk_out_intended_length =
+					amount;
+			START_TRANSFER_OR(common, bulk_out, bh->outreq,
+					&bh->outreq_busy, &bh->state)
+				/* Don't know what to do if
+				 * common->fsg is NULL */
+				return -EIO;
+			common->next_buffhd_to_fill = bh->next;
+			continue;
+		}
+
+		/* Write the received data to the backing file */
+		bh = common->next_buffhd_to_drain;
+		if (bh->state == BUF_STATE_EMPTY && !get_some_more){
+			break;			/* We stopped early */
+		}
+		if (bh->state == BUF_STATE_FULL) {
+			smp_rmb();
+			common->next_buffhd_to_drain = bh->next;
+			bh->state = BUF_STATE_EMPTY;
+
+			/* Did something go wrong with the transfer? */
+			if (bh->outreq->status != 0) {
+				curlun->sense_data = SS_COMMUNICATION_FAILURE;
+				curlun->sense_data_info = file_offset >> 9;
+				curlun->info_valid = 1;
+				break;
+			}
+
+			amount = bh->outreq->actual;
+			if (desc->len - file_offset < amount) {
+				LERROR(curlun,
+	"write %u @ %llu beyond end %llu\n",
+	amount, (unsigned long long) file_offset,
+	(unsigned long long) desc->len);
+				amount = desc->len - file_offset;
+			}
+
+			/* Perform the write */
+//	printk("[fms_CR6]%s: (4)buf-write offset=0x%x size=0x%x \n", __func__,(unsigned int)file_offset,amount);
+			memcpy(desc->buffer + file_offset, (char __user *) bh->buf,amount);
+			file_offset += amount;
+			amount_left_to_write -= amount;
+			common->residue -= amount;
+
+#ifdef MAX_UNFLUSHED_BYTES
+			curlun->unflushed_bytes += amount;
+			if (curlun->unflushed_bytes >= MAX_UNFLUSHED_BYTES) {
+				fsync_sub(curlun);
+				curlun->unflushed_bytes = 0;
+			}
+#endif
+			/* Did the host decide to stop early? */
+			if (bh->outreq->actual != bh->outreq->length) {
+				common->short_packet_received = 1;
+				break;
+			}
+			continue;
+		}
+
+		/* Wait for something to happen */
+		rc = sleep_thread(common);
+		if (rc)
+			return rc;
+	}
+
+	return -EIO;		/* No default reply */
+}
+
+
+/*-------------------------------------------------------------------------*/
+/* [ADD END] 2011/04/15 KDDI : vender write command */
+/* [CHANGE END] 2011/05/27 KDDI : [offset]use change */
+
 /*-------------------------------------------------------------------------*/
 
 static int do_synchronize_cache(struct fsg_common *common)
@@ -1229,12 +1562,43 @@ static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[1] = curlun->removable ? 0x80 : 0;
 	buf[2] = 2;		/* ANSI SCSI level 2 */
 	buf[3] = 2;		/* SCSI-2 INQUIRY data format */
-	buf[4] = 31;		/* Additional length */
-	buf[5] = 0;		/* No special options */
-	buf[6] = 0;
-	buf[7] = 0;
-	memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
-	return 36;
+
+/* [CHANGE START] 2011/07/27 KDDI : inquiry command extend ,[Lun0] only */
+	if ( strcmp(dev_name(&curlun->dev),"lun0") == 0 ){
+		/* buf[4] = 31;		*//* Additional length */
+/* [CHANGE START] 2011/04/15 KDDI : return data size */
+		buf[4] = 31 + INQUIRY_VENDOR_SPECIFIC_SIZE;		/* Additional length */
+/* [CHANGE END] 2011/04/15 KDDI : return data size */
+		buf[5] = 0;		/* No special options */
+		buf[6] = 0;
+		buf[7] = 0;
+		memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
+		/* return 36;*/
+/* [CHANGE START] 2011/05/26 KDDI : return data set */
+		memcpy(buf + 8 + sizeof common->inquiry_string - 1,
+			   curlun->inquiry_vendor, INQUIRY_VENDOR_SPECIFIC_SIZE);
+		VUNIQ_DBG("%s: KDDI offset[%d] uniq offset[%d]\n", __func__,
+				(8 + sizeof common->inquiry_string - 1),
+				g_vendor_info->Offset);
+		if (g_vendor_info) {
+			memcpy(&buf[g_vendor_info->Offset],
+				g_vendor_info->Data, g_vendor_info->DataSize);
+			memcpy(&buf[g_vendor_info->Offset + g_vendor_info->DataSize],
+				curlun->inquiry_vendor,
+				(INQUIRY_VENDOR_SPECIFIC_SIZE - g_vendor_info->DataSize));
+			VUNIQ_DUMP(&buf[16],40);
+		}
+		return 36 + INQUIRY_VENDOR_SPECIFIC_SIZE;
+/* [CHANGE END] 2011/05/26 KDDI : return data set */
+	} else {
+		buf[4] = 31;		/* Additional length */
+		buf[5] = 0;		/* No special options */
+		buf[6] = 0;
+		buf[7] = 0;
+		memcpy(buf + 8, common->inquiry_string, sizeof common->inquiry_string);
+		return 36;
+	}
+/* [CHANGE END] 2011/07/27 KDDI : inquiry command extend ,[Lun0] only */
 }
 
 
@@ -1952,6 +2316,8 @@ static int check_command(struct fsg_common *common, int cmnd_size,
 	if (curlun && curlun->unit_attention_data != SS_NO_SENSE &&
 			common->cmnd[0] != SC_INQUIRY &&
 			common->cmnd[0] != SC_REQUEST_SENSE) {
+		VUNIQ_DBG("%s:cmd[0x%02X] curlun->unit_attention_data(%d)\n",
+					 __func__, common->cmnd[0], curlun->unit_attention_data);
 		curlun->sense_data = curlun->unit_attention_data;
 		curlun->unit_attention_data = SS_NO_SENSE;
 		return -EINVAL;
@@ -1985,6 +2351,9 @@ static int do_scsi_command(struct fsg_common *common)
 	int			reply = -EINVAL;
 	int			i;
 	static char		unknown[16];
+/* [ADD START] 2011/04/15 KDDI : for vendor command */
+	struct op_desc	*desc;
+/* [ADD END] 2011/04/15 KDDI : for vendor command */
 
 	dump_cdb(common);
 
@@ -2206,6 +2575,67 @@ static int do_scsi_command(struct fsg_common *common)
 			reply = do_write(common);
 		break;
 
+/* [ADD START] 2011/04/15 KDDI : add case vendor command */
+	case SC_VENDOR_START ... SC_VENDOR_END:
+/* [ADD START] 2011/05/30 KDDI : mutex_lock */
+		mutex_lock(&sysfs_lock);
+/* [ADD END] 2011/05/30 KDDI : mutex_lock */
+/* [CHANGE START] 2011/09/30 KDDI : check[Lun0] BugFix , log add */
+/* [ADD START] 2011/07/27 KDDI : inquiry command extend ,[Lun0] only */
+		if (common->lun != 0){
+			printk("[fms_CR6]%s e4 command receive but not[lun0]! \n", __func__);
+			goto cmd_error;
+		}
+/* [ADD END] 2011/07/27 KDDI : inquiry command extend ,[Lun0] only */
+		desc = common->luns[common->lun].op_desc[common->cmnd[0] - SC_VENDOR_START];
+		if (!desc){
+			printk("[fms_CR6]%s  opcode-%02x not ready! \n", __func__,common->cmnd[0]);
+			goto cmd_error;
+		}
+/* [CHANGE END] 2011/09/30 KDDI : check[Lun0] BugFix , log add */
+
+		common->data_size_from_cmnd = get_unaligned_be32(&common->cmnd[6]);
+		if (common->data_size_from_cmnd == 0)
+				goto cmd_error;
+		if (~common->cmnd[1] & 0x10) {
+			if ((reply = check_command(common, 10, DATA_DIR_FROM_HOST,
+					(1<<1) | (0xf<<2) | (0xf<<6),
+					0, "VENDOR WRITE BUFFER")) == 0) {
+				reply = do_write_buffer(common);
+				desc->update = jiffies;
+				schedule_work(&desc->work);
+			} else
+				goto cmd_error;
+/* [ADD START] 2011/05/30 KDDI : mutex_unlock */
+				mutex_unlock(&sysfs_lock);
+/* [ADD END] 2011/05/30 KDDI : mutex_unlock */
+			break;
+		} else {
+			if ((reply = check_command(common, 10, DATA_DIR_TO_HOST,
+					(1<<1) | (0xf<<2) | (0xf<<6),
+					0, "VENDOR READ BUFFER")) == 0)
+				reply = do_read_buffer(common);
+			else
+				goto cmd_error;
+/* [ADD START] 2011/05/30 KDDI : mutex_unlock */
+				mutex_unlock(&sysfs_lock);
+/* [ADD END] 2011/05/30 KDDI : mutex_unlock */
+			break;
+		}
+		cmd_error:
+/* [ADD START] 2011/05/30 KDDI : mutex_unlock */
+			mutex_unlock(&sysfs_lock);
+/* [ADD END] 2011/05/30 KDDI : mutex_unlock */
+			common->data_size_from_cmnd = 0;
+			sprintf(unknown, "Unknown x%02x", common->cmnd[0]);
+			if ((reply = check_command(common, common->cmnd_size,
+					DATA_DIR_UNKNOWN, 0x3ff, 0, unknown)) == 0) { /* 2011/04/27 KDDI : ff->3ff(10Byte support) */
+				common->curlun->sense_data = SS_INVALID_COMMAND;
+				reply = -EINVAL;
+			}
+		break;
+/* [ADD END] 2011/04/15 KDDI : add case vendor command */
+
 	/* Some mandatory commands that we recognize but don't implement.
 	 * They don't mean much in this setting.  It's left as an exercise
 	 * for anyone interested to implement RESERVE and RELEASE in terms
@@ -2217,6 +2647,9 @@ static int do_scsi_command(struct fsg_common *common)
 		/* Fall through */
 
 	default:
+		if (!vender_unique_command(common, bh, &reply)) {
+			break;
+		}
 unknown_cmnd:
 		common->data_size_from_cmnd = 0;
 		sprintf(unknown, "Unknown x%02x", common->cmnd[0]);
@@ -2448,6 +2881,7 @@ static int fsg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	struct fsg_common *common = fsg->common;
 	const struct usb_endpoint_descriptor *d;
 	int rc;
+	unsigned long flags;
 
 	/* Enable the endpoints */
 	d = fsg_ep_desc(common->gadget,
@@ -2470,12 +2904,22 @@ static int fsg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	clear_bit(IGNORE_BULK_OUT, &fsg->atomic_bitflags);
 	fsg->common->new_fsg = fsg;
 	raise_exception(fsg->common, FSG_STATE_CONFIG_CHANGE);
+
+	if (g_vendor_info) {
+		VUNIQ_DBG("%s: set POLLMSG\n", __func__);
+		spin_lock_irqsave(&usbmass_dev.lock, flags);
+		usbmass_dev.connect_chg = POLLMSG;
+		spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+		wake_up_interruptible(&(usbmass_dev.rwait));
+	}
+
 	return 0;
 }
 
 static void fsg_disable(struct usb_function *f)
 {
 	struct fsg_dev *fsg = fsg_from_func(f);
+	unsigned long flags;
 
 	/* Disable the endpoints */
 	if (fsg->bulk_in_enabled) {
@@ -2489,6 +2933,15 @@ static void fsg_disable(struct usb_function *f)
 		fsg->bulk_out->driver_data = NULL;
 	}
 	fsg->common->new_fsg = NULL;
+
+	if (g_vendor_info) {
+		VUNIQ_DBG("%s: set POLLREMOVE\n", __func__);
+		spin_lock_irqsave(&(usbmass_dev.lock), flags);
+		usbmass_dev.connect_chg = POLLREMOVE;
+		spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+		wake_up_interruptible(&(usbmass_dev.rwait));
+	}
+
 	raise_exception(fsg->common, FSG_STATE_CONFIG_CHANGE);
 }
 
@@ -2734,6 +3187,534 @@ static DEVICE_ATTR(ro, 0644, fsg_show_ro, fsg_store_ro);
 static DEVICE_ATTR(file, 0644, fsg_show_file, fsg_store_file);
 static DEVICE_ATTR(nofua, 0644, fsg_show_nofua, fsg_store_nofua);
 
+/* [ADD START] 2011/04/15 KDDI : functions to handle vendor command */
+/*************************** VENDOR SCSI OPCODE ***************************/
+
+/* setting notify change buffer */
+static void buffer_notify_sysfs(struct work_struct *work)
+{
+	struct op_desc	*desc;
+//printk("[fms_CR6]%s\n", __func__);
+	desc = container_of(work, struct op_desc, work);
+	sysfs_notify_dirent(desc->value_sd);
+}
+
+/* check vendor command code */
+static int vendor_cmd_is_valid(unsigned cmd)
+{
+	if(cmd < SC_VENDOR_START)
+		return 0;
+	if(cmd > SC_VENDOR_END)
+		return 0;
+	return 1;
+}
+
+/* read vendor command buffer */
+static ssize_t
+vendor_cmd_read_buffer(struct file* f, struct kobject *kobj, struct bin_attribute *attr,
+                char *buf, loff_t off, size_t count)
+{
+	ssize_t	status;
+	struct op_desc	*desc = attr->private;
+
+//printk("[fms_CR6]%s: buf=%p off=%lx count=%x\n", __func__, buf, (unsigned long)off, count);
+	mutex_lock(&sysfs_lock);
+
+	if (!test_bit(FLAG_EXPORT, &desc->flags))
+		status = -EIO;
+	else {
+		size_t srclen, n;
+		void *src;
+		size_t nleft = count;
+		src = desc->buffer;
+		srclen = desc->len;
+
+		if (off < srclen) {
+			n = min(nleft, srclen - (size_t) off);
+			memcpy(buf, src + off, n);
+			nleft -= n;
+			buf += n;
+			off = 0;
+		} else {
+			off -= srclen;
+		}
+		status = count - nleft;
+	}
+
+	mutex_unlock(&sysfs_lock);
+	return status;
+}
+
+/* write vendor commn buffer */
+static ssize_t
+vendor_cmd_write_buffer(struct file* f, struct kobject *kobj, struct bin_attribute *attr,
+                char *buf, loff_t off, size_t count)
+{
+	ssize_t	status;
+	struct op_desc	*desc = attr->private;
+
+//printk("[fms_CR6]%s: buf=%p off=%lx count=%x\n", __func__, buf, (unsigned long)off, count);
+	mutex_lock(&sysfs_lock);
+
+	if (!test_bit(FLAG_EXPORT, &desc->flags))
+		status = -EIO;
+	else {
+		size_t dstlen, n;
+		size_t nleft = count;
+		void *dst;
+
+		dst = desc->buffer;
+		dstlen = desc->len;
+
+		if (off < dstlen) {
+			n = min(nleft, dstlen - (size_t) off);
+			memcpy(dst + off, buf, n);
+			nleft -= n;
+			buf += n;
+			off = 0;
+		} else {
+			off -= dstlen;
+		}
+		status = count - nleft;
+	}
+
+	desc->update = jiffies;
+	schedule_work(&desc->work);
+
+	mutex_unlock(&sysfs_lock);
+	return status;
+}
+
+/* memory mapping vendor commn buffer */
+static int
+vendor_cmd_mmap_buffer(struct file *f, struct kobject *kobj, struct bin_attribute *attr,
+		struct vm_area_struct *vma)
+{
+        int rc = -EINVAL;
+	unsigned long pgoff, delta;
+	ssize_t size = vma->vm_end - vma->vm_start;
+	struct op_desc	*desc = attr->private;
+
+printk("[fms_CR6]%s\n", __func__);
+/* [ADD START] 2011/05/30 KDDI : mutex_lock */
+	mutex_lock(&sysfs_lock);
+/* [ADD END] 2011/05/30 KDDI : mutex_lock */
+
+	if (vma->vm_pgoff != 0) {
+		printk("mmap failed: page offset %lx\n", vma->vm_pgoff);
+		goto done;
+	}
+
+	pgoff = __pa(desc->buffer);
+	delta = PAGE_ALIGN(pgoff) - pgoff;
+printk("[fms_CR6]%s size=%x delta=%lx pgoff=%lx\n", __func__, size, delta, pgoff);
+
+        if (size + delta > desc->len) {
+                printk("[fms_CR6]%s mmap failed: size %d\n", __func__, size);
+		goto done;
+        }
+
+        pgoff += delta;
+        vma->vm_flags |= VM_RESERVED;
+
+	rc = io_remap_pfn_range(vma, vma->vm_start, pgoff >> PAGE_SHIFT,
+		size, vma->vm_page_prot);
+
+	if (rc < 0)
+                printk("[fms_CR6]%s mmap failed: remap error %d\n", __func__, rc);
+done:
+/* [ADD START] 2011/05/30 KDDI : mutex_unlock */
+	mutex_unlock(&sysfs_lock);
+/* [ADD END] 2011/05/30 KDDI : mutex_unlock */
+	return rc;
+}
+
+/* set 'size'file */
+static ssize_t vendor_size_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct op_desc	*desc = dev_to_desc(dev);
+	ssize_t		status;
+
+	mutex_lock(&sysfs_lock);
+
+	if (!test_bit(FLAG_EXPORT, &desc->flags))
+		status = -EIO;
+	else
+		status = sprintf(buf, "%d\n", desc->len);
+
+	mutex_unlock(&sysfs_lock);
+	return status;
+}
+
+/* when update 'size'file */
+static ssize_t vendor_size_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	long len;
+	char* buffer;
+	struct op_desc	*desc = dev_to_desc(dev);
+	ssize_t		status;
+/* [ADD START] 2011/08/26 KDDI : check init alloc */
+	long cmd;
+	char cmd_buf[16]="0x";
+	struct fsg_lun  *curlun = fsg_lun_from_dev(&desc->dev);
+/* [ADD END] 2011/08/26 KDDI : check init alloc */
+
+	mutex_lock(&sysfs_lock);
+
+	if (!test_bit(FLAG_EXPORT, &desc->flags))
+		status = -EIO;
+	else {
+		struct bin_attribute* dev_bin_attr_buffer = &desc->dev_bin_attr_buffer;
+		status = strict_strtol(buf, 0, &len);
+		if (status < 0) {
+			status = -EINVAL;
+			goto done;
+		}
+		if ( desc->len == len ) {
+			status = 0;
+			printk("[fms_CR6]%s already size setting! size not change\n", __func__);
+			goto done;
+		}
+
+/* [CHANGE START] 2011/08/26 KDDI : check init alloc */
+		strict_strtol(strcat(cmd_buf,dev_name(&desc->dev)+7), 0, &cmd);
+		printk("[fms_CR6]%s cmd=0x%x old_size=0x%x new_size=0x%x \n", __func__, (unsigned int)cmd, (unsigned int)desc->len, (unsigned int)len);
+
+		if ( cmd-SC_VENDOR_START < ALLOC_CMD_CNT && len == ALLOC_INI_SIZE){
+			printk("[fms_CR6]%s buffer alreay malloc \n",__func__);
+			buffer = curlun->reserve_buf[cmd-SC_VENDOR_START];
+		} else {
+			printk("[fms_CR6]%s malloc buffer \n",__func__);
+			buffer = kzalloc(len, GFP_KERNEL);
+			if(!buffer) {
+				status = -ENOMEM;
+				goto done;
+			}
+		}
+		if ( cmd-SC_VENDOR_START+1 > ALLOC_CMD_CNT || desc->len != ALLOC_INI_SIZE){
+			printk("[fms_CR6]%s free old buffer \n",__func__);
+			kfree(desc->buffer);
+		}
+		desc->len = len;
+/* [CHANGE END] 2011/08/26 KDDI : check init alloc */
+		desc->buffer = buffer;
+		device_remove_bin_file(&desc->dev, dev_bin_attr_buffer);
+		dev_bin_attr_buffer->size = len;
+		status = device_create_bin_file(&desc->dev, dev_bin_attr_buffer);
+	}
+
+done:
+	mutex_unlock(&sysfs_lock);
+	return status ? : size;
+}
+/* define 'size'file */
+static DEVICE_ATTR(size, 0606, vendor_size_show, vendor_size_store); /* 2011/04/19 KDDI : permission change 0600->0606 */
+
+/* set 'update'file */
+static ssize_t vendor_update_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct op_desc	*desc = dev_to_desc(dev);
+	ssize_t		status;
+
+	mutex_lock(&sysfs_lock);
+
+	if (!test_bit(FLAG_EXPORT, &desc->flags))
+		status = -EIO;
+	else
+		status = sprintf(buf, "%lu\n", desc->update);
+
+	mutex_unlock(&sysfs_lock);
+	return status;
+}
+/* define 'update'file */
+static DEVICE_ATTR(update, 0404, vendor_update_show, 0); /* 2011/04/19 KDDI : permission change 0400->0404 */
+
+/* vendor command create */
+static int vendor_cmd_export(struct device *dev, unsigned cmd, int init)
+{
+	struct fsg_lun	*curlun = fsg_lun_from_dev(dev);
+	struct op_desc	*desc;
+	int		status = -EINVAL;
+	struct bin_attribute* dev_bin_attr_buffer;
+
+	if (!vendor_cmd_is_valid(cmd)){
+		printk("[fms_CR6]%s cmd=%02x cmd is invalid\n", __func__, cmd);
+		goto done;
+	}
+
+	desc = curlun->op_desc[cmd-SC_VENDOR_START];
+	if (!desc) {
+		desc = kzalloc(sizeof(struct op_desc), GFP_KERNEL);
+		if(!desc) {
+			printk("[fms_CR6]%s op_desc alloc failed\n", __func__);
+			status = -ENOMEM;
+			goto done;
+		}
+		curlun->op_desc[cmd-SC_VENDOR_START] = desc;
+	}
+
+	status = 0;
+	if (test_bit(FLAG_EXPORT, &desc->flags)) {
+		printk("[fms_CR6]%s already exported\n", __func__);
+		goto done;
+	}
+
+/* [CHANGE START] 2011/08/26 KDDI : check init alloc */
+	if ( cmd-SC_VENDOR_START+1 > ALLOC_CMD_CNT ){
+		desc->buffer = kzalloc(2048, GFP_KERNEL);
+		printk("[fms_CR6]%s opcode:%02x bufalloc size:%08x \n", __func__, cmd, 2048);
+		if(!desc->buffer) {
+			printk("[fms_CR6]%s buffer alloc failed\n", __func__);
+			status = -ENOMEM;
+			goto done;
+		}
+		desc->len = 2048;
+	}else{
+		desc->buffer = curlun->reserve_buf[cmd-SC_VENDOR_START];
+		printk("[fms_CR6]%s opcode:%02x bufcopy bufsize:%08x \n", __func__, cmd, ALLOC_INI_SIZE);
+		desc->len = ALLOC_INI_SIZE;
+	}
+/* [CHANGE END] 2011/08/26 KDDI : check init alloc */
+
+	dev_bin_attr_buffer = &desc->dev_bin_attr_buffer;
+	desc->dev.release = op_release;
+	desc->dev.parent = &curlun->dev;
+	dev_set_drvdata(&desc->dev, curlun);
+	dev_set_name(&desc->dev,"opcode-%02x", cmd);
+	status = device_register(&desc->dev);
+	if (status != 0) {
+		printk("[fms_CR6]%s failed to register opcode%d: %d\n", __func__, cmd, status);
+		goto done;
+	}
+
+	dev_bin_attr_buffer->attr.name = "buffer";
+/* [ADD START] 2011/08/26 KDDI : at initialization, change the attributes */
+	if (init)
+		dev_bin_attr_buffer->attr.mode = 0660;
+	else
+		dev_bin_attr_buffer->attr.mode = 0606;
+/* [ADD END] 2011/08/26 KDDI : at initialization, change the attributes */
+	dev_bin_attr_buffer->read = vendor_cmd_read_buffer;
+	dev_bin_attr_buffer->write = vendor_cmd_write_buffer;
+	dev_bin_attr_buffer->mmap = vendor_cmd_mmap_buffer;
+/* [CHANGE START] 2011/08/26 KDDI : check init alloc */
+	if ( cmd-SC_VENDOR_START+1 > ALLOC_CMD_CNT ){
+		dev_bin_attr_buffer->size = 2048;
+	}else{
+		dev_bin_attr_buffer->size = ALLOC_INI_SIZE;
+	}
+/* [CHANGE END] 2011/08/26 KDDI : check init alloc */
+	dev_bin_attr_buffer->private = desc;
+	status = device_create_bin_file(&desc->dev, dev_bin_attr_buffer);
+
+	if (status != 0) {
+		device_remove_bin_file(&desc->dev, dev_bin_attr_buffer);
+		kfree(desc->buffer);
+		desc->buffer = 0;
+		desc->len = 0;
+		device_unregister(&desc->dev);
+		goto done;
+	}
+
+/* [ADD START] 2011/08/26 KDDI : at initialization, change the attributes */
+	if (init){
+		dev_attr_size.attr.mode = 0660;
+		dev_attr_update.attr.mode = 0440;
+	} else {
+		dev_attr_size.attr.mode = 0606;
+		dev_attr_update.attr.mode = 0404;
+	}
+/* [ADD END] 2011/08/26 KDDI : at initialization, change the attributes */
+	status = device_create_file(&desc->dev, &dev_attr_size);
+	if (status == 0) status = device_create_file(&desc->dev, &dev_attr_update);
+	if (status != 0) {
+		printk("[fms_CR6]%s device_create_file failed: %d\n", __func__, status);
+		device_remove_file(&desc->dev, &dev_attr_update);
+		device_remove_file(&desc->dev, &dev_attr_size);
+		device_remove_bin_file(&desc->dev, dev_bin_attr_buffer);
+/* [CHANGE START] 2011/08/26 KDDI : check init alloc */
+		if ( cmd-SC_VENDOR_START+1 > ALLOC_CMD_CNT )
+			kfree(desc->buffer);
+/* [CHANGE END] 2011/08/26 KDDI : check init alloc */
+		desc->buffer = 0;
+		desc->len = 0;
+		device_unregister(&desc->dev);
+		goto done;
+	}
+
+	desc->value_sd = sysfs_get_dirent(desc->dev.kobj.sd, NULL, "update");
+	INIT_WORK(&desc->work, buffer_notify_sysfs);
+
+	if (status == 0)
+		set_bit(FLAG_EXPORT, &desc->flags);
+
+/* [ADD START] 2011/05/26 KDDI : init 'update' */
+	desc->update = 0;
+/* [ADD END] 2011/05/26 KDDI : init 'update' */
+
+
+done:
+	if (status)
+		pr_debug("%s: opcode%d status %d\n", __func__, cmd, status);
+	return status;
+}
+
+/* vendor command delete */
+static void vendor_cmd_unexport(struct device *dev, unsigned cmd)
+{
+	struct fsg_lun	*curlun = fsg_lun_from_dev(dev);
+	struct op_desc *desc;
+	int status = -EINVAL;
+
+	if (!vendor_cmd_is_valid(cmd)){
+		printk("[fms_CR6]%s cmd=%02x cmd is invalid\n", __func__, cmd);
+		goto done;
+	}
+
+	desc = curlun->op_desc[cmd-SC_VENDOR_START];
+	if (!desc) {
+		printk("[fms_CR6]%s not export\n", __func__);
+		status = -ENODEV;
+		goto done;
+	}
+
+	if (test_bit(FLAG_EXPORT, &desc->flags)) {
+		struct bin_attribute* dev_bin_attr_buffer = &desc->dev_bin_attr_buffer;
+		clear_bit(FLAG_EXPORT, &desc->flags);
+		cancel_work_sync(&desc->work);
+		device_remove_file(&desc->dev, &dev_attr_update);
+		device_remove_file(&desc->dev, &dev_attr_size);
+		device_remove_bin_file(&desc->dev, dev_bin_attr_buffer);
+/* [CHANGE START] 2011/08/26 KDDI : check init alloc */
+		if ( cmd-SC_VENDOR_START+1 > ALLOC_CMD_CNT || desc->len != ALLOC_INI_SIZE){
+			kfree(desc->buffer);
+			printk("[fms_CR6]%s opcode:%02x free buff\n", __func__, cmd);
+		}else{
+			printk("[fms_CR6]%s opcode:%02x not free buff\n", __func__, cmd);
+		}
+/* [CHANGE END] 2011/08/26 KDDI : check init alloc */
+		desc->buffer = 0;
+		desc->len = 0;
+		status = 0;
+		device_unregister(&desc->dev);
+		kfree(desc);
+		curlun->op_desc[cmd-SC_VENDOR_START] = 0;
+	} else
+		status = -ENODEV;
+
+done:
+	if (status)
+		pr_debug("%s: opcode%d status %d\n", __func__, cmd, status);
+}
+
+
+/* when 'export'file update */
+static ssize_t vendor_export_store(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t len)
+{
+	long cmd;
+	int status;
+
+	status = strict_strtol(buf, 0, &cmd);
+	if (status < 0)
+		goto done;
+
+	status = -EINVAL;
+
+	if (!vendor_cmd_is_valid(cmd))
+		goto done;
+
+	mutex_lock(&sysfs_lock);
+
+/* [CHANGE START] 2011/08/26 KDDI : at initialization, change the attributes */
+	status = vendor_cmd_export(dev, cmd, 0);
+/* [CHANGE END] 2011/08/26 KDDI : at initialization, change the attributes */
+	if (status < 0)
+		vendor_cmd_unexport(dev, cmd);
+
+	mutex_unlock(&sysfs_lock);
+done:
+	if (status)
+		pr_debug(KERN_INFO"%s: status %d\n", __func__, status);
+	return status ? : len;
+}
+
+/* define 'export'file */
+//static DEVICE_ATTR(export, 0202, 0, vendor_export_store); /* 2011/04/19 KDDI : permission change 0200->0202 */
+static DEVICE_ATTR(export, 0220, 0, vendor_export_store); /* 2011/08/10 KDDI : permission change 0202->0220 */
+
+/* when 'unexport'file update */
+static ssize_t vendor_unexport_store(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t len)
+{
+	long cmd;
+	int status;
+
+	status = strict_strtol(buf, 0, &cmd);
+	if (status < 0)
+		goto done;
+
+	status = -EINVAL;
+
+	if (!vendor_cmd_is_valid(cmd))
+		goto done;
+
+	mutex_lock(&sysfs_lock);
+
+	status = 0;
+	vendor_cmd_unexport(dev, cmd);
+
+	mutex_unlock(&sysfs_lock);
+done:
+	if (status)
+		pr_debug(KERN_INFO"%s: status %d\n", __func__, status);
+	return status ? : len;
+}
+/* define 'unexport'file */
+//static DEVICE_ATTR(unexport, 0202, 0, vendor_unexport_store); /* 2011/04/19 KDDI : permission change 0200->0202 */
+static DEVICE_ATTR(unexport, 0220, 0, vendor_unexport_store); /* 2011/08/10 KDDI : permission change 0202->0220 */
+
+/* set 'inquiry'file */
+static ssize_t vendor_inquiry_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct fsg_lun *curlun = fsg_lun_from_dev(dev);
+	ssize_t status;
+
+	mutex_lock(&sysfs_lock);
+	status = sprintf(buf, "\"%s\"\n", curlun->inquiry_vendor);
+
+	mutex_unlock(&sysfs_lock);
+	return status;
+}
+
+/* get 'inquiry'file */
+static ssize_t vendor_inquiry_store(struct device *dev,
+                struct device_attribute *attr, const char *buf, size_t len)
+{
+	struct fsg_lun *curlun = fsg_lun_from_dev(dev);
+
+	mutex_lock(&sysfs_lock);
+	strncpy(curlun->inquiry_vendor, buf,
+					sizeof curlun->inquiry_vendor);
+	curlun->inquiry_vendor[sizeof curlun->inquiry_vendor - 1] = '\0';
+
+	mutex_unlock(&sysfs_lock);
+	return 0;
+}
+
+/* define 'inquiry'file */
+//static DEVICE_ATTR(inquiry, 0606, vendor_inquiry_show, vendor_inquiry_store); /* 2011/04/19 KDDI : permission change 0600->0606 */
+static DEVICE_ATTR(inquiry, 0660, vendor_inquiry_show, vendor_inquiry_store); /* 2011/08/10 KDDI : permission change 0606->0660 */
+
+static void op_release(struct device *dev)
+{
+}
+/* [ADD END] 2011/04/15 KDDI : functions to handle vendor command */
+
 /****************************** FSG COMMON ******************************/
 
 static void fsg_common_release(struct kref *ref);
@@ -2789,6 +3770,9 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 	common->ep0 = gadget->ep0;
 	common->ep0req = cdev->req;
 
+#if 1
+	fsg_intf_desc.iInterface = 0;
+#else
 	/* Maybe allocate device-global string IDs, and patch descriptors */
 	if (fsg_strings[FSG_STRING_INTERFACE].id == 0) {
 		rc = usb_string_id(cdev);
@@ -2797,6 +3781,7 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		fsg_strings[FSG_STRING_INTERFACE].id = rc;
 		fsg_intf_desc.iInterface = rc;
 	}
+#endif
 
 	/* Create the LUNs, open their backing files, and register the
 	 * LUN devices in sysfs. */
@@ -2846,6 +3831,45 @@ static struct fsg_common *fsg_common_init(struct fsg_common *common,
 		rc = device_create_file(&curlun->dev, &dev_attr_nofua);
 		if (rc)
 			goto error_luns;
+
+/* [CHANGE START] 2011/07/27 KDDI : 'export' file create ,[Lun0] only */
+		if ( i==0 ){
+/* [ADD START] 2011/04/15 KDDI : create file for vendor command */
+			rc = device_create_file(&curlun->dev, &dev_attr_export);
+			if (rc)
+				goto error_luns;
+			rc = device_create_file(&curlun->dev, &dev_attr_unexport);
+			if (rc)
+				goto error_luns;
+			rc = device_create_file(&curlun->dev, &dev_attr_inquiry);
+			if (rc)
+				goto error_luns;
+/* [CHANGE START] 2011/05/26 KDDI : initital inquiry response */
+			memset(curlun->inquiry_vendor, 0, sizeof curlun->inquiry_vendor);
+			strcpy(curlun->inquiry_vendor, INQUIRY_VENDOR_INIT);
+/* [CHANGE END] 2011/05/26 KDDI : initital inquiry response */
+/* [ADD END] 2011/04/15 KDDI : create file for vendor command */
+/* [ADD START] 2011/08/26 KDDI : alloc for commn buffer ,and make e4-buffer*/
+			for (i=0; i < ALLOC_CMD_CNT; i++){
+				curlun->reserve_buf[i] = kzalloc(ALLOC_INI_SIZE, GFP_KERNEL);
+				printk("[fms_CR6]%s alloc buf[%d]\n", __func__,i);
+				if(!curlun->reserve_buf[i]){
+					printk("[fms_CR6]%s Error : buffer malloc fail! cmd_idx=%d \n", __func__, i);
+					rc = -ENOMEM;
+					goto error_release;
+				}
+			}
+
+/* [CHANGE START] 2011/08/26 KDDI : at initialization, change the attributes */
+			rc = vendor_cmd_export(&curlun->dev, 0xe4, 1);
+/* [CHANGE END] 2011/08/26 KDDI : at initialization, change the attributes */
+			if (rc < 0){
+				vendor_cmd_unexport(&curlun->dev, 0xe4);
+				goto error_release;
+			}
+/* [ADD END] 2011/08/26 KDDI : alloc for commn buffer ,and make e4-buffer*/
+		}
+/* [CHANGE END] 2011/07/27 KDDI : 'export' file create ,[Lun0] only */
 
 		if (lcfg->filename) {
 			rc = fsg_lun_open(curlun, lcfg->filename);
@@ -2988,8 +4012,30 @@ static void fsg_common_release(struct kref *ref)
 		struct fsg_lun *lun = common->luns;
 		unsigned i = common->nluns;
 
+/* [ADD START] 2011/04/15 KDDI : delete file for vendor command */
+		unsigned j;
+/* [ADD END] 2011/04/15 KDDI : delete file for vendor command */
+
 		/* In error recovery common->nluns may be zero. */
 		for (; i; --i, ++lun) {
+/* [CHANGE START] 2011/07/27 KDDI : 'export' file create ,[Lun0] only */
+			if (i == common->nluns){
+/* [ADD START] 2011/04/15 KDDI : delete file for vendor command */
+				for (j=SC_VENDOR_START; j < SC_VENDOR_END + 1; j++) {
+					vendor_cmd_unexport(&lun->dev, j);
+/* [ADD START] 2011/08/26 KDDI : check init alloc */
+					if ( j-SC_VENDOR_START < ALLOC_CMD_CNT ){
+						printk("[fms_CR6]%s kfree buf[%d]\n", __func__,j-SC_VENDOR_START);
+						kfree(lun->reserve_buf[j-SC_VENDOR_START]);
+					}
+/* [ADD END] 2011/08/26 KDDI : check init alloc */
+				}
+				device_remove_file(&lun->dev, &dev_attr_export);
+				device_remove_file(&lun->dev, &dev_attr_unexport);
+				device_remove_file(&lun->dev, &dev_attr_inquiry);
+/* [ADD END] 2011/04/15 KDDI : delete file for vendor command */
+			}
+/* [CHANGE END] 2011/07/27 KDDI : 'export' file create ,[Lun0] only */
 			device_remove_file(&lun->dev, &dev_attr_nofua);
 			device_remove_file(&lun->dev, &dev_attr_ro);
 			device_remove_file(&lun->dev, &dev_attr_file);
@@ -3007,6 +4053,7 @@ static void fsg_common_release(struct kref *ref)
 			kfree(bh->buf);
 		} while (++bh, --i);
 	}
+
 
 	if (common->free_storage_on_release)
 		kfree(common);
@@ -3092,12 +4139,768 @@ autoconf_fail:
 }
 
 
+/********************* ADD FUNCTION(HDR Cooperation) ***********************/
+/*===========================================================================
+FUNCTION do_read_vendor
+
+DESCRIPTION
+ vender  write.
+
+DEPENDENCIES
+ common  [in/out]  pointer Data shared by all the FSG instances .
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int do_read_vendor(struct fsg_common *common)
+{
+	int rc = -EIO;
+	unsigned long flags;
+	struct unq_vendor_info *vendor = common->unq_vendor;
+	struct fsg_buffhd *bh = common->next_buffhd_to_fill;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+
+	for (;;) {
+		if (vendor->vendor_exit) {
+			VUNIQ_DBG("%s:vendor_exit == 1\n", __func__);
+			break;
+		}
+		bh = common->next_buffhd_to_fill;
+
+		VUNIQ_DBG("%s:START_TRANSFER_OR\n", __func__);
+		/* Send this buffer and go read some more */
+		bh->state = BUF_STATE_FULL;
+		bh->inreq->zero = 0;
+		START_TRANSFER_OR(common, bulk_in, bh->inreq,
+				&bh->inreq_busy, &bh->state)
+			/* Don't know what to do if
+			 * common->fsg is NULL */
+			goto vendor_fail;
+		common->next_buffhd_to_fill = bh->next;
+
+		while (bh->state != BUF_STATE_EMPTY) {
+			rc = sleep_thread(common);
+			if (rc) {
+				VUNIQ_ERR("%s:err sleep_thread()\n", __func__);
+				goto vendor_fail;
+			}
+		}
+
+		VUNIQ_DBG("%s:(bh->state == %d \n", __func__, bh->state);
+
+		spin_lock_irqsave(&(usbmass_dev.lock), flags);
+		usbmass_dev.wcomplete = 1;
+		vendor->vseq = VSEQ_IO_EVENT_WAIT;
+		spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+		wake_up_interruptible(&(usbmass_dev.wwait));
+
+		while (vendor->vseq == VSEQ_IO_EVENT_WAIT) {
+			rc = sleep_thread(common);
+			if (rc) {
+				VUNIQ_ERR("%s:err sleep_thread()\n", __func__);
+				goto vendor_fail;
+			}
+		}
+		VUNIQ_DBG("%s:vendor->vseq == %d\n", __func__, vendor->vseq);
+	}
+	vendor->vendor_exit = 0;
+	VUNIQ_DBG("%s:end return %d\n", __func__, -EIO);
+	return -EIO;		/* No default reply */
+
+
+vendor_fail:
+	VUNIQ_ERR("%s:err VSEQ_ERROR\n", __func__);
+	spin_lock_irqsave(&(usbmass_dev.lock), flags);
+	usbmass_dev.wcomplete = 1;
+	vendor->vseq = VSEQ_ERROR;
+	vendor->vendor_exit = 0;
+	spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+	wake_up_interruptible(&(usbmass_dev.wwait));
+	VUNIQ_DBG("%s:end return %d\n", __func__, rc);
+	return rc;		/* No default reply */
+}
+
+
+/*===========================================================================
+FUNCTION do_write_vendor
+
+DESCRIPTION
+ vender  write.
+
+DEPENDENCIES
+ common  [in/out]  pointer Data shared by all the FSG instances .
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int do_write_vendor(struct fsg_common *common)
+{
+	struct fsg_buffhd	*bh;
+	int			get_some_more;
+	unsigned int		amount;
+	int			rc = -EIO;
+	struct unq_vendor_info *vendor = common->unq_vendor;
+	unsigned long flags;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+
+	get_some_more = 1;
+	amount = common->residue;
+
+	for (;;) {
+		if (vendor->vendor_exit) {
+			break;
+		}
+
+		/* Queue a request for more data from the host */
+		bh = common->next_buffhd_to_fill;
+		if (bh->state == BUF_STATE_EMPTY && get_some_more) {
+			bh->outreq->length = amount;
+			START_TRANSFER_OR(common, bulk_out, bh->outreq,
+					  &bh->outreq_busy, &bh->state)
+				/* Don't know what to do if
+				 * common->fsg is NULL */
+				goto vendor_fail;
+			common->next_buffhd_to_fill = bh->next;
+			get_some_more = 0;
+			continue;
+		}
+
+		/* Wait for something to happen */
+		rc = sleep_thread(common);
+		if (rc) {
+			VUNIQ_ERR("%s:err sleep_thread()\n", __func__);
+			goto vendor_fail;
+		}
+
+		/* Write the received data to the backing file */
+		bh = common->next_buffhd_to_drain;
+
+		if (bh->state == BUF_STATE_FULL) {
+			smp_rmb();
+
+			spin_lock_irqsave(&(usbmass_dev.lock), flags);
+			usbmass_dev.rcomplete = 1;
+			vendor->vseq = VSEQ_IO_EVENT_WAIT;
+			spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+			wake_up_interruptible(&(usbmass_dev.rwait));
+
+			while (vendor->vseq == VSEQ_IO_EVENT_WAIT) {
+				rc = sleep_thread(common);
+				if (rc) {
+					common->next_buffhd_to_drain =
+								 bh->next;
+					bh->state = BUF_STATE_EMPTY;
+					VUNIQ_ERR("%s:err sleep_thread()\n",
+								 __func__);
+					goto vendor_fail;
+				}
+			}
+			common->next_buffhd_to_drain = bh->next;
+			bh->state = BUF_STATE_EMPTY;
+			get_some_more = 1;
+			amount = common->residue;
+		}
+	}
+	vendor->vendor_exit = 0;
+	VUNIQ_DBG("%s:end return %d\n", __func__, -EIO);
+	return -EIO;		/* No default reply */
+
+vendor_fail:
+	VUNIQ_ERR("%s:err VSEQ_ERROR\n", __func__);
+	spin_lock_irqsave(&(usbmass_dev.lock), flags);
+	usbmass_dev.rcomplete = 1;
+	vendor->vseq = VSEQ_ERROR;
+	vendor->vendor_exit = 0;
+	spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+	wake_up_interruptible(&(usbmass_dev.rwait));
+	VUNIQ_DBG("%s:end return %d\n", __func__, rc);
+	return rc;		/* No default reply */
+}
+
+
+/*===========================================================================
+FUNCTION vender_unique_command
+
+DESCRIPTION
+ vender unique command command transfer.
+
+DEPENDENCIES
+ common  [in/out]  pointer Data shared by all the FSG instances .
+ bh      [out]     buffer pointer.
+ reply   [out]     reply status.
+
+RETURN VALUE
+       -1:unknown command
+        0:OK
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int vender_unique_command(struct fsg_common *common,
+			struct fsg_buffhd *bh, int32_t* reply_ptr)
+{
+	int rc = 0;
+	unsigned long flags;
+	struct unq_vendor_info *vendor;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+
+	if (common->unq_vendor == NULL) {
+		VUNIQ_ERR("%s:err common->unq_vendor NULL return %d\n",
+				 __func__, -ENOMEM);
+		return -ENOMEM;
+	}
+
+	if (g_vendor_info == NULL) {
+		VUNIQ_ERR("%s:err g_vendor_info NULL return %d\n",
+				 __func__, -EFAULT);
+		return -EFAULT;
+	}
+
+	vendor = common->unq_vendor;
+
+	/* command event */
+	spin_lock_irqsave(&(usbmass_dev.lock), flags);
+	usbmass_dev.rcomplete = 1;
+	vendor->vseq = VSEQ_IO_EVENT_WAIT;
+	spin_unlock_irqrestore(&(usbmass_dev.lock), flags);
+	wake_up_interruptible(&(usbmass_dev.rwait));
+
+	/* wait event */
+	while (vendor->vseq == VSEQ_IO_EVENT_WAIT) {
+		rc = sleep_thread(common);
+		if (rc) {
+			VUNIQ_ERR("%s:err sleep_thread() return %d\n", __func__, rc);
+			return rc;
+		}
+	}
+
+	VUNIQ_DBG("%s:start vendor->vseq[%d]\n", __func__, vendor->vseq);
+	switch (vendor->vseq) {
+	case VSEQ_TX_DATA :
+		*reply_ptr = do_read_vendor(common);
+		break;
+	case VSEQ_RX_DATA:
+		*reply_ptr = do_write_vendor(common);
+		break;
+	case VSEQ_DO_READ:
+		common->data_size_from_cmnd =
+			get_unaligned_be16(&common->cmnd[7]) << 9;
+		*reply_ptr = check_command(common, 10, DATA_DIR_TO_HOST,
+					(1<<1) | (0xf<<2) | (3<<7), 1,
+					"READ(10)");
+		if (*reply_ptr == 0)
+			*reply_ptr = do_read(common);
+		break;
+	case VSEQ_DO_WRITE:
+		common->data_size_from_cmnd =
+				get_unaligned_be16(&common->cmnd[7]) << 9;
+		*reply_ptr = check_command(common, 10, DATA_DIR_FROM_HOST,
+					(1<<1) | (0xf<<2) | (3<<7), 1,
+					"WRITE(10)");
+		if (*reply_ptr == 0) {
+			*reply_ptr = do_write(common);
+		}
+		break;
+	case VSEQ_NO_DATA:
+		*reply_ptr = 0;
+		break;
+	case VSEQ_INVALID_CMD:
+	default:
+		rc = -EINVAL;
+		break;
+	}
+	if (vendor->vseq != VSEQ_ERROR) {
+		vendor->vseq = VSEQ_NONE;
+		VUNIQ_DBG("%s:set vendor->vseq = VSEQ_NONE\n", __func__);
+	}
+	VUNIQ_DBG("%s:end rc %d\n", __func__, rc);
+	return rc;
+}
+
+/*===========================================================================
+FUNCTION usbmass_open
+
+DESCRIPTION
+ device file open.
+
+DEPENDENCIES
+ inode  [in]      device file inode pointer.
+ filp   [in/out]  file status pointer.
+
+RETURN VALUE
+ 0 on success
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int usbmass_open(struct inode *inode, struct file *filp)
+{
+	VUNIQ_DBG("%s:start\n", __func__);
+	/* save device in the file's private structure */
+	usbmass_dev.connect_chg = 0;
+	usbmass_dev.rcomplete = 0;
+	usbmass_dev.wcomplete = 0;
+	filp->private_data = &usbmass_dev;
+	VUNIQ_DBG("%s:end\n", __func__);
+	return 0;
+}
+
+
+/*===========================================================================
+FUNCTION usbmass_poll
+
+DESCRIPTION
+ event polling.
+
+DEPENDENCIES
+ filp  [in]    file status pointer.
+ wait  [in]    poll table pointer.
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static unsigned int usbmass_poll(struct file *filp, poll_table *wait)
+{
+	int ret = 0;
+	unsigned long flags;
+	struct usbmass_device *dev = filp->private_data;
+	struct fsg_common *common = the_fsg->common;
+	struct unq_vendor_info *vendor =  common->unq_vendor;
+	vendor = common->unq_vendor;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+
+	poll_wait(filp, &(dev->rwait), wait);
+
+	poll_wait(filp, &(dev->wwait), wait);
+
+	spin_lock_irqsave(&(dev->lock), flags);
+
+	VUNIQ_DBG("%s:dev->connect_chg = 0x%04x \n",
+			__func__, dev->connect_chg);
+	VUNIQ_DBG("%s:dev->rcomplete = %d, dev->wcomplete =%d \n",
+			__func__, dev->rcomplete, dev->wcomplete);
+
+	if (vendor->vseq == VSEQ_ERROR) {
+		VUNIQ_ERR("%s:err POLLERR\n", __func__);
+		ret = POLLERR;
+		vendor->vseq = VSEQ_NONE;
+		VUNIQ_DBG("%s:set vendor->vseq = VSEQ_NONE\n", __func__);
+	}
+
+	if (dev->connect_chg) {
+		ret |= (POLLIN | POLLOUT | dev->connect_chg);
+		dev->connect_chg = 0;
+	} else if ((dev->rcomplete) ) {
+		ret |= (POLLIN  | POLLRDNORM);
+		dev->rcomplete = 0;
+	} else if (dev->wcomplete) {
+		ret |= (POLLOUT | POLLWRNORM);
+		dev->wcomplete = 0;
+	}
+	spin_unlock_irqrestore(&(dev->lock), flags);
+	VUNIQ_DBG("%s:end ret 0x%04x\n", __func__, ret);
+	return ret;
+}
+
+
+/*===========================================================================
+FUNCTION ioc_get_data
+
+DESCRIPTION
+ vender  write.
+
+DEPENDENCIES
+ common  [in/out]  pointer Data shared by all the FSG instances .
+ data    [in]      user data pointer .
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int ioc_get_data(struct fsg_common *common,
+			struct ioc_data_type* data)
+{
+	int rc = 0;
+	struct fsg_buffhd *bh = common->next_buffhd_to_drain;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+	/* Did the host decide to stop early? */
+	if (bh->outreq->actual != bh->outreq->length) {
+		common->short_packet_received = 1;
+		VUNIQ_ERR("%s:err bh->outreq->actual\n", __func__);
+		return -EFAULT;
+	}
+
+	rc = put_user(bh->outreq->actual, &data->BuffSize);
+	if (rc) {
+		VUNIQ_ERR("%s:err put_user()\n", __func__);
+		return -EFAULT;
+	}
+	VUNIQ_DUMP(bh->buf, 16);
+	rc = copy_to_user(data->Buff, bh->buf, bh->outreq->actual);
+	if (rc) {
+		VUNIQ_ERR("%s:err copy_to_user()\n", __func__);
+		return -EFAULT;
+	}
+	VUNIQ_DBG("%s:end rc %d\n", __func__, rc);
+	return rc;
+}
+
+
+/*===========================================================================
+FUNCTION ioc_tx_data
+
+DESCRIPTION
+ vender  write.
+
+DEPENDENCIES
+ common  [in/out]  pointer Data shared by all the FSG instances .
+ data    [in]      user data pointer .
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int ioc_tx_data(struct fsg_common *common,
+			struct ioc_data_type* data)
+{
+	int rc = 0;
+	struct ioc_data_type st_data;
+	struct unq_vendor_info *vendor = common->unq_vendor;
+	struct fsg_buffhd *bh = common->next_buffhd_to_fill;
+	struct fsg_lun *curlun = common->curlun;
+	int flg_data = 0;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+	vendor->vendor_exit = 0;
+	rc = copy_from_user(&st_data, data, sizeof(struct ioc_data_type));
+	if (rc) {
+		st_data.CSW.SenseData = SS_UNRECOVERED_READ_ERROR;
+		vendor->vendor_exit = 1;
+		VUNIQ_ERR("%s:err copy_to_user()\n", __func__);
+		rc = -EFAULT;
+	} else {
+		VUNIQ_DBG("%s:Request[%d]\n",
+			 __func__, st_data.Request);
+		switch (st_data.Request){
+		case USBMAS_REQUEST_DATA_LAST:
+			vendor->vendor_exit = 1;
+		case USBMAS_REQUEST_DATA:
+			if (st_data.BuffSize) {
+				flg_data = 1;
+			} else {
+				/* not set vendor_exit because...secure_mass modules */
+				/*  ioctl USBMAS_REQUEST_DATA_ERROR                  */
+				/* vendor->vendor_exit = 1; */
+				st_data.CSW.SenseData = SS_UNRECOVERED_READ_ERROR;
+				VUNIQ_ERR("%s:err BuffSize 0 \n", __func__);
+				rc = -EINVAL;
+			}
+			break;
+		case USBMAS_REQUEST_DATA_ERROR:
+			vendor->vendor_exit = 1;
+			break;
+		}
+	}
+
+	if (flg_data) {
+		VUNIQ_DBG("%s:bh->state[%d]\n", __func__, bh->state);
+		/* wait buffer empty */
+		while (bh->state != BUF_STATE_EMPTY) {
+			rc = sleep_thread(common);
+			if (rc) {
+				st_data.CSW.SenseData = SS_UNRECOVERED_READ_ERROR;
+				VUNIQ_ERR("%s:err sleep_thread() return %d\n", __func__, -EFAULT);
+				return -EFAULT;
+			}
+		}
+
+		rc = copy_from_user(bh->buf, st_data.Buff, st_data.BuffSize);
+		if (rc) {
+			st_data.CSW.SenseData = SS_UNRECOVERED_READ_ERROR;
+			VUNIQ_ERR("%s:err copy_from_user()\n", __func__);
+			rc = -EFAULT;
+		} else {
+			bh->inreq->length = st_data.BuffSize;
+		}
+		VUNIQ_DUMP(bh->buf, 16);
+		VUNIQ_DBG("%s:bh->inreq->length[%d] BuffSize[%d] \n",
+			 __func__, bh->inreq->length,  st_data.BuffSize);
+	}
+	if (vendor->vendor_exit) {
+		common->residue = st_data.CSW.Residue;
+		curlun->sense_data = st_data.CSW.SenseData;
+		VUNIQ_DBG("%s:set CSW residue[%d] sense_data[0x%06X]\n",
+			__func__, common->residue, curlun->sense_data);
+		if (st_data.CSW.Status == USB_STATUS_PHASE_ERROR) {
+			VUNIQ_DBG("%s:set phase_error\n", __func__);
+			common->phase_error = 1;
+		}
+	}
+	VUNIQ_DBG("%s:end rc %d\n", __func__, rc);
+	return rc;
+}
+
+
+/*===========================================================================
+FUNCTION ioc_rx_data
+
+DESCRIPTION
+ vender  write.
+
+DEPENDENCIES
+ common  [in/out]  pointer Data shared by all the FSG instances .
+ data    [in]      user data pointer .
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+ none
+===========================================================================*/
+static int ioc_rx_data(struct fsg_common *common,
+			struct ioc_data_type* data)
+{
+	int rc = 0;
+	struct ioc_data_type st_data;
+	struct unq_vendor_info *vendor = common->unq_vendor;
+	struct fsg_lun *curlun = common->curlun;
+
+	VUNIQ_DBG("%s:start\n", __func__);
+	vendor->vendor_exit = 0;
+
+	rc = copy_from_user(&st_data, data, sizeof(struct ioc_data_type));
+	if (rc) {
+		st_data.CSW.SenseData = SS_WRITE_ERROR;
+		vendor->vendor_exit = 1;
+		VUNIQ_ERR("%s:err copy_from_user()\n", __func__);
+		rc = -EFAULT;
+	} else {
+		VUNIQ_DBG("%s:Request[%d]\n",
+			 __func__, st_data.Request);
+		switch (st_data.Request){
+		case USBMAS_REQUEST_DATA:
+			common->residue = st_data.BuffSize;
+			break;
+		case USBMAS_REQUEST_DATA_LAST:
+		case USBMAS_REQUEST_DATA_ERROR:
+		default:
+			vendor->vendor_exit = 1;
+			break;
+		}
+	}
+	if (vendor->vendor_exit) {
+		common->residue = st_data.CSW.Residue;
+		curlun->sense_data = st_data.CSW.SenseData;
+		VUNIQ_DBG("%s:set CSW residue[%d] sense_data[0x%06X]\n",
+			__func__, common->residue, curlun->sense_data);
+		if (st_data.CSW.Status == USB_STATUS_PHASE_ERROR) {
+			VUNIQ_DBG("%s:set phase_error\n", __func__);
+			common->phase_error = 1;
+		}
+	}
+	VUNIQ_DBG("%s:end rc %d\n", __func__, rc);
+	return rc;
+}
+
+
+/*===========================================================================
+FUNCTION usbmass_ioctl
+
+DESCRIPTION
+ event ioctl.
+
+DEPENDENCIES
+ inode  [in]       device file inode pointer.
+ filp   [in]       file status pointer.
+ cmd    [in/out]   command pointer.
+ arg    [in/out]   paramater pointer.
+
+RETURN VALUE
+ 0 on success, otherwise an error code
+
+SIDE EFFECTS
+
+===========================================================================*/
+static int usbmass_ioctl(struct inode *inode, struct file *filp,
+	 unsigned cmd, unsigned long arg)
+{
+	int rc = 0;
+	void __user *u_arg = (void __user *)arg;
+	struct usbmass_device *dev = filp->private_data;
+	struct fsg_common *common = the_fsg->common;
+	struct unq_vendor_info *vendor =  common->unq_vendor;
+	enum vendor_sequence vseq = VSEQ_NONE;
+
+	VUNIQ_DBG("%s:start cmd = 0x%04X\n", __func__, cmd);
+	switch (cmd) {
+	case USBMAS_IOC_START_NOTIFY:
+		if (g_vendor_info == NULL) {
+			g_vendor_info =
+				kzalloc(sizeof(struct ioc_startinfo_type),
+				GFP_KERNEL);
+			VUNIQ_DBG("%s:g_vendor_inf = 0x%08x\n",
+					 __func__, (int)g_vendor_info);
+		}
+		if (g_vendor_info) {
+			rc = copy_from_user(g_vendor_info, u_arg, 
+					sizeof(struct ioc_startinfo_type));
+			if (rc) {
+				VUNIQ_ERR("%s:err copy_from_user()\n", __func__);
+				rc = -EFAULT;
+			}
+			VUNIQ_DBG("%s:Offset[%d] DataSize[%d]\n",
+				__func__, g_vendor_info->Offset,
+				g_vendor_info->DataSize);
+			VUNIQ_DUMP(g_vendor_info->Data,
+					USBMAS_MAX_COMMAND_SIZE);
+		}
+		break;
+	case USBMAS_IOC_GET_COMMAND:
+		{
+		struct ioc_bulk_cb_wrap_type ioc_cbw;
+		memset(&ioc_cbw, 0, sizeof(ioc_cbw));
+		ioc_cbw.TransferLength = common->data_size;
+		ioc_cbw.DataDir = (uint8_t)(common->data_dir);
+		ioc_cbw.Lun = common->lun;
+		ioc_cbw.CmdLength = common->cmnd_size;
+		memcpy(ioc_cbw.Cmd, common->cmnd, common->cmnd_size);
+		rc = copy_to_user(u_arg, &ioc_cbw, sizeof(ioc_cbw));
+		if (rc) {
+			rc = -EFAULT;
+			dev->rcomplete = 0;
+			VUNIQ_ERR("%s:err copy_to_user()\n", __func__);
+		}
+		VUNIQ_DUMP(&ioc_cbw, sizeof(ioc_cbw));
+		break;
+		}
+	case USBMAS_IOC_GET_FSGLUN:
+		{
+		struct fsg_lun *curlun;
+		struct ioc_fsg_lun_type ioc_fsg;
+		memset(&ioc_fsg, 0, sizeof(ioc_fsg));
+		ioc_fsg.Luns = common->nluns;
+		if ((common->lun >= 0) && (common->lun < common->nluns)) {
+			curlun = &common->luns[common->lun];
+			common->curlun = curlun;
+			curlun->sense_data = SS_NO_SENSE;
+			curlun->sense_data_info = 0;
+			curlun->info_valid = 0;
+			common->data_size_from_cmnd = common->data_size;
+			ioc_fsg.FileSts = (curlun->filp) ? 1: 0 ;
+			ioc_fsg.NumSectors = curlun->num_sectors;
+			ioc_fsg.Ro = curlun->ro;
+			ioc_fsg.SenseData = curlun->sense_data;
+			ioc_fsg.UnitAttentionData =
+					curlun->unit_attention_data;
+			ioc_fsg.FsgBuffLen = FSG_BUFLEN;
+		} else {
+			common->curlun = NULL;
+			common->bad_lun_okay = 0;
+		}
+		VUNIQ_DBG("%s: Luns[%d] FileSts[%d] NumSectors[%d] Ro[%d] "
+		"SenseData[0x%06X] SenseDataInfo[%d] UnitAttentionData[%d]"
+		" FsgBuffLen[%d] sizeof(%d)\n",
+		__func__, ioc_fsg.Luns, ioc_fsg.FileSts, ioc_fsg.NumSectors,
+		ioc_fsg.Ro, ioc_fsg.SenseData, ioc_fsg.SenseDataInfo,
+		ioc_fsg.UnitAttentionData, ioc_fsg.FsgBuffLen,
+		sizeof(ioc_fsg));
+		rc = copy_to_user(u_arg, &ioc_fsg, sizeof(ioc_fsg));
+		if (rc) {
+			VUNIQ_ERR("%s:err copy_to_user()\n", __func__);
+			rc = -EFAULT;
+		}
+		break;
+		}
+	case USBMAS_IOC_GET_DATA:
+		rc  = ioc_get_data(common, (struct ioc_data_type*)arg);
+		break;
+	case USBMAS_IOC_TX_DATA:
+		rc = ioc_tx_data(common, (struct ioc_data_type*)arg);
+		vseq = VSEQ_TX_DATA;
+		break;
+	case USBMAS_IOC_RX_DATA:
+		rc = ioc_rx_data(common, (struct ioc_data_type*)arg);
+		vseq = VSEQ_RX_DATA;
+		break;
+	case USBMAS_IOC_DO_READ:
+		vseq = VSEQ_DO_READ;
+		break;
+	case USBMAS_IOC_DO_WRITE:
+		vseq = VSEQ_DO_WRITE;
+		break;
+	case USBMAS_IOC_NO_DATA:
+		{
+		struct fsg_lun *curlun;
+		struct ioc_data_type st_data;
+		curlun = common->curlun;
+		rc = copy_from_user(&st_data, u_arg,
+					sizeof(struct ioc_data_type));
+		if (rc) {
+			st_data.CSW.Residue = 0;
+			st_data.CSW.SenseData = SS_COMMUNICATION_FAILURE;
+			rc = -EFAULT;
+			VUNIQ_ERR("%s:err copy_from_user()\n", __func__);
+		}
+		common->residue = st_data.CSW.Residue;
+		curlun->sense_data = st_data.CSW.SenseData;
+		VUNIQ_DBG("%s:set CSW residue[%d] sense_data[0x%06X]\n",
+			__func__, common->residue, curlun->sense_data);
+		if (st_data.CSW.Status == USB_STATUS_PHASE_ERROR) {
+			VUNIQ_DBG("%s:set phase_error\n", __func__);
+			common->phase_error = 1;
+		}
+		if (curlun->unit_attention_data != SS_NO_SENSE) {
+			curlun->unit_attention_data = SS_NO_SENSE;
+		}
+		vseq = VSEQ_NO_DATA;
+		break;
+		}
+	case USBMAS_IOC_INVALID_COMMAND:
+		vseq = VSEQ_INVALID_CMD;
+		break;
+	default:
+		rc = -EINVAL;
+	}
+	VUNIQ_DBG("%s:vseq = %d\n", __func__, vseq);
+	if (vseq != VSEQ_NONE) {
+		spin_lock(&common->lock);
+		vendor->vseq = vseq;
+		VUNIQ_DBG("%s:wakeup_thread\n", __func__);
+		wakeup_thread(common);
+		spin_unlock(&common->lock);
+	}
+	VUNIQ_DBG("%s:end rc %d\n", __func__, rc);
+	return rc;
+}
+
+
+
 /****************************** ADD FUNCTION ******************************/
 
+#if 0
 static struct usb_gadget_strings *fsg_strings_array[] = {
 	&fsg_stringtab,
 	NULL,
 };
+#endif
 
 static ssize_t print_switch_name(struct switch_dev *sdev, char *buf)
 {
@@ -3135,7 +4938,9 @@ static int fsg_add(struct usb_composite_dev *cdev,
 #else
 	fsg->function.name        = FSG_DRIVER_DESC;
 #endif
+#if 0
 	fsg->function.strings     = fsg_strings_array;
+#endif
 	fsg->function.bind        = fsg_bind;
 	fsg->function.unbind      = fsg_unbind;
 	fsg->function.setup       = fsg_setup;
@@ -3291,6 +5096,19 @@ int mass_storage_bind_config(struct usb_configuration *c)
 	struct fsg_common *common = fsg_common_init(NULL, c->cdev, &fsg_cfg);
 	if (IS_ERR(common))
 		return -1;
+
+	common->unq_vendor =
+		kzalloc(sizeof(struct unq_vendor_info), GFP_KERNEL);
+	VUNIQ_DBG("%s:unq_vendor = 0x%08x\n", __func__,
+				(int)common->unq_vendor);
+	misc_register(&usbmass_dev_misc);
+	VUNIQ_DBG("%s:misc_register(usbmass_dev_misc)\n", __func__);
+	init_waitqueue_head(&(usbmass_dev.rwait));
+	init_waitqueue_head(&(usbmass_dev.wwait));
+	spin_lock_init(&(usbmass_dev.lock));
+	/* until power off using ,not call "kfree","misc_deregister" */
+
+
 	return fsg_add(c->cdev, c, common);
 }
 

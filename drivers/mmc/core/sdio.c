@@ -1,6 +1,9 @@
 /*
  *  linux/drivers/mmc/sdio.c
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ *
  *  Copyright 2006-2007 Pierre Ossman
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,6 +26,8 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 #include "sdio_cis.h"
+
+#define VENDOR_ID  0x392
 
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 #include <linux/mmc/sdio_ids.h>
@@ -384,16 +389,20 @@ static int mmc_sdio_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Change to the card's maximum speed.
 	 */
-	if (mmc_card_highspeed(card)) {
-		/*
-		 * The SDIO specification doesn't mention how
-		 * the CIS transfer speed register relates to
-		 * high-speed, but it seems that 50 MHz is
-		 * mandatory.
-		 */
-		mmc_set_clock(host, 50000000);
+	if (card->cis.vendor != VENDOR_ID)  /* To by pass the check for Beceem Vendor Products */ {
+		if (mmc_card_highspeed(card)) {
+			/*
+			 * The SDIO specification doesn't mention how
+			 * the CIS transfer speed register relates to
+			 * high-speed, but it seems that 50 MHz is
+			 * mandatory.
+			 */
+			mmc_set_clock(host, 50000000);
+		} else {
+			mmc_set_clock(host, card->cis.max_dtr);
+		}
 	} else {
-		mmc_set_clock(host, card->cis.max_dtr);
+	  mmc_set_clock(host, 25000000);
 	}
 
 	/*
@@ -503,6 +512,8 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 	return err;
 }
 
+#define WIMAX_RESU_NOINIT
+
 static int mmc_sdio_resume(struct mmc_host *host)
 {
 	int i, err;
@@ -512,11 +523,25 @@ static int mmc_sdio_resume(struct mmc_host *host)
 
 	/* Basic card reinitialization. */
 	mmc_claim_host(host);
+#ifdef WIMAX_RESU_NOINIT
+	if (host->card->cis.vendor != VENDOR_ID) {
+		err = mmc_sdio_init_card(host, host->ocr, host->card,
+					 (host->pm_flags & MMC_PM_KEEP_POWER));
+	}
+	else {
+		printk(KERN_ERR "%s: mmc_sdio_resume no init\n", mmc_hostname(host));
+		err = 0;
+	}
+	if (!err)
+		/* We may have switched to 1-bit mode during suspend. */
+		err = sdio_enable_wide(host->card);
+#else
 	err = mmc_sdio_init_card(host, host->ocr, host->card,
 				 (host->pm_flags & MMC_PM_KEEP_POWER));
 	if (!err)
 		/* We may have switched to 1-bit mode during suspend. */
 		err = sdio_enable_wide(host->card);
+#endif
 	if (!err && host->sdio_irqs)
 		mmc_signal_sdio_irq(host);
 	mmc_release_host(host);
@@ -733,16 +758,20 @@ int sdio_reset_comm(struct mmc_card *card)
 	/*
 	 * Change to the card's maximum speed.
 	 */
-	if (mmc_card_highspeed(card)) {
-		/*
-		 * The SDIO specification doesn't mention how
-		 * the CIS transfer speed register relates to
-		 * high-speed, but it seems that 50 MHz is
-		 * mandatory.
-		 */
-		mmc_set_clock(host, 50000000);
+	if (card->cis.vendor != VENDOR_ID)  /* To by pass the check for Beceem Vendor Products */ {
+		if (mmc_card_highspeed(card)) {
+			/*
+			 * The SDIO specification doesn't mention how
+			 * the CIS transfer speed register relates to
+			 * high-speed, but it seems that 50 MHz is
+			 * mandatory.
+			 */
+			mmc_set_clock(host, 50000000);
+		} else {
+			mmc_set_clock(host, card->cis.max_dtr);
+		}
 	} else {
-		mmc_set_clock(host, card->cis.max_dtr);
+	  mmc_set_clock(host, 25000000);
 	}
 
 	err = sdio_enable_wide(card);

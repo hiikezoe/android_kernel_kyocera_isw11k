@@ -16,6 +16,11 @@
  *
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 /* #define DEBUG */
 /* #define VERBOSE_DEBUG */
 
@@ -34,8 +39,11 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/composite.h>
 #include <linux/usb/gadget.h>
+#include <linux/miscdevice.h>
+#include <linux/workqueue.h>
 
 #include "gadget_chips.h"
+#include "../../../arch/arm/mach-msm/smd_private.h"
 
 /*
  * Kbuild is not very cooperative with respect to linking separately
@@ -56,9 +64,14 @@ MODULE_VERSION("1.0");
 
 static const char longname[] = "Gadget Android";
 
+
 /* Default vendor and product IDs, overridden by platform data */
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
+
+#define HS_PRODUCT_ID		0x0536
+#define MS_PRODUCT_ID		0x0537
+#define MS_ADB_PRODUCT_ID	0x0553
 
 struct android_dev {
 	struct usb_composite_dev *cdev;
@@ -70,6 +83,14 @@ struct android_dev {
 
 	int product_id;
 	int version;
+	int boot_mode;
+	int init_flg;
+	int boot_pullup;
+	int current_mode;
+	int type;
+	int mode;
+	char serial[16];
+	struct work_struct mode_write_work;
 };
 
 static struct android_dev *_android_dev;
@@ -108,7 +129,7 @@ static struct usb_device_descriptor device_desc = {
 	.bDeviceClass         = USB_CLASS_PER_INTERFACE,
 	.idVendor             = __constant_cpu_to_le16(VENDOR_ID),
 	.idProduct            = __constant_cpu_to_le16(PRODUCT_ID),
-	.bcdDevice            = __constant_cpu_to_le16(0xffff),
+	.bcdDevice            = __constant_cpu_to_le16(0x0100),
 	.bNumConfigurations   = 1,
 };
 
@@ -126,8 +147,31 @@ static const struct usb_descriptor_header *otg_desc[] = {
 
 static struct list_head _functions = LIST_HEAD_INIT(_functions);
 static int _registered_function_count = 0;
+int f_diag_mode = -1;                           /* driver mode High Serial/Diag */
 
 static void android_set_default_product(int product_id);
+static int set_init_mode(struct android_dev *dev, int mode, char* serial);
+static int set_default_mode(struct android_dev *dev, int mode);
+static int set_current_mode(struct android_dev *dev, int mode);
+static int set_usb_mode(struct android_dev *dev, int mode);
+
+atomic_t open_excl;
+
+static inline int _lock(atomic_t *excl)
+{
+	if (atomic_inc_return(excl) == 1) {
+		return 0;
+	} else {
+		atomic_dec(excl);
+		return -1;
+	}
+}
+
+static inline void _unlock(atomic_t *excl)
+{
+	atomic_dec(excl);
+}
+
 
 void android_usb_set_connected(int connected)
 {
@@ -254,11 +298,207 @@ static int get_product_id(struct android_dev *dev)
 	return dev->product_id;
 }
 
+static int set_init_mode(struct android_dev *dev, int mode, char* serial)
+{
+	struct usb_function *func;
+	int adb_enable = 0;
+
+	pr_debug("-- <%s> --  param[ <mode:%d> <serial:%s>\n",__func__, mode, serial);
+
+	strcpy(serial_number, serial);
+	strings_dev[STRING_SERIAL_IDX].s = serial_number;
+
+	dev->init_flg = 1;
+	if (dev->boot_mode == 2) {
+		list_for_each_entry(func, &android_config_driver.functions, list) {
+			if (!strcmp(func->name, "adb") && !func->disabled) {
+				adb_enable = 1;
+			}
+		}
+                if (adb_enable == 1 && dev->boot_pullup == 0) {
+			android_usb_set_connected(1);
+                }
+	}
+
+	if (dev->boot_mode != 0) {
+		return 0;
+	}
+
+	return set_usb_mode(dev, mode);
+}
+
+static int set_default_mode(struct android_dev *dev, int mode)
+{
+	pr_debug("-- <%s> --  param[ <mode:%d>\n",__func__, mode);
+
+	if (dev->boot_mode != 0) {
+		pr_debug("-- <%s> -- set only High Speed Serial on Factory mode.\n",__func__);
+		mode = 2;
+	}
+
+	return set_usb_mode(dev, mode);
+}
+
+static int set_current_mode(struct android_dev *dev, int mode)
+{
+	pr_debug("-- <%s> --  param[ <mode:%d>\n",__func__, mode);
+
+	if (mode == 0) {
+		return 0;
+	}
+
+	return set_usb_mode(dev, mode);
+}
+
+static int set_usb_mode(struct android_dev *dev, int mode)
+{
+	int mode_pid = 0;
+	struct usb_function *func;
+	int adb_enable = 0;
+
+	dev->current_mode = mode;
+
+	list_for_each_entry(func, &android_config_driver.functions, list) {
+		if (!strcmp(func->name, "adb") && !func->disabled) {
+			adb_enable=1;
+		}
+	}
+	
+	/* new mode enable */
+	switch(mode) {
+		case 0 : mode_pid = (adb_enable == 0) ? MS_PRODUCT_ID : MS_ADB_PRODUCT_ID; break;
+		case 1 : mode_pid = (adb_enable == 0) ? MS_PRODUCT_ID : MS_ADB_PRODUCT_ID; break;
+		case 2 : mode_pid = HS_PRODUCT_ID; break;
+	}
+	android_set_default_product(mode_pid);
+	
+	device_desc.idProduct = __constant_cpu_to_le16(mode_pid);
+	if (dev->cdev)
+		dev->cdev->desc.idProduct = device_desc.idProduct;
+
+	pr_debug("-- <%s> --  gadget disconnected (pull down)\n",__func__);
+	// pulldown
+	android_usb_set_connected(0);
+	msleep(50);
+	pr_debug("-- <%s> --  gadget connected (pull up)\n",__func__);
+	// pullup
+	android_usb_set_connected(1);
+	return 0;
+}
+
+static ssize_t usbmode_read(struct file *fp, char __user *buf,
+				size_t count, loff_t *pos)
+{
+	unsigned char sndbuf[12];
+	struct android_dev		*dev = _android_dev;
+	pr_debug("%s\n", __func__);
+
+	if(!fp || !buf || count < 1)
+		return -EINVAL;
+	sprintf(sndbuf, "%d\n", dev->current_mode);
+	if (copy_to_user(buf, sndbuf, 1))
+		return -EFAULT;
+
+	return 1;
+}
+
+static void usb_mode_write_work(struct work_struct *w)
+{
+	struct android_dev		*dev = _android_dev;
+
+	switch (dev->type) {
+	case 0:
+		set_init_mode(dev, dev->mode, dev->serial);
+		break;
+	case 1:
+		set_default_mode(dev, dev->mode);
+		break;
+	case 2:
+		set_current_mode(dev, dev->mode);
+		break;
+	default:
+		break;
+	}
+	return;
+}
+
+static ssize_t usbmode_write(struct file *fp, const char __user *buf,
+				 size_t count, loff_t *pos)
+{
+	struct android_dev		*dev = _android_dev;
+	int r = count, xfer;
+	unsigned char cmdbuf[64];
+	if(!fp || !buf || count < 3)
+		return -EINVAL;
+	memset(cmdbuf,0x0,sizeof(cmdbuf));
+	memset(dev->serial,0x0,sizeof(dev->serial));
+
+	while (count > 0) {
+		xfer = count;
+		if (copy_from_user(cmdbuf, buf, xfer)) {
+			r = -EFAULT;
+			goto ioerror;
+		}
+		buf += xfer;
+		count -= xfer;
+		r += xfer;
+	}
+	sscanf(cmdbuf, "%d %d %s", &dev->type, &dev->mode, dev->serial);
+
+pr_debug("--- android.c --- func[:%s] SetType:%s, UsbMode:%s, SerialNo%s\n",__func__,
+(dev->type == 0)  ? "INIT"      : (dev->type == 1) ? "DEFAULT": (dev->type==2)   ? "CURRENT" : "UNKNOWN",
+(dev->mode == 0)  ? "NONE"      : (dev->mode == 1) ? "UMS"    : (dev->mode == 2) ? "HSS"     : "UNKNOWN",
+(dev->serial[0] == 0) ? "No Serial" : dev->serial);
+	if (dev->type != 0 && dev->type != 1 && dev->type != 2) {
+		r = -EINVAL;
+	}
+	schedule_work(&dev->mode_write_work);
+
+ioerror:
+	return r;
+}
+
+static int usbmode_open(struct inode *ip, struct file *fp)
+{
+	pr_debug("%s\n", __func__);
+	if (_lock(&open_excl))
+		return -EBUSY;
+
+	fp->private_data = _android_dev;
+
+	return 0;
+}
+
+static int usbmode_release(struct inode *ip, struct file *fp)
+{
+	pr_debug("%s\n", __func__);
+	_unlock(&open_excl);
+	return 0;
+}
+
+/* file operations for usbmode device /dev/usbmode */
+static struct file_operations usbmode_fops = {
+	.owner = THIS_MODULE,
+	.read = usbmode_read,
+	.write = usbmode_write,
+	.open = usbmode_open,
+	.release = usbmode_release,
+};
+
+#define DIAGDEVNAME		"usbmode"
+
+static struct miscdevice usbmode_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = DIAGDEVNAME,
+	.fops = &usbmode_fops,
+};
+
 static int __devinit android_bind(struct usb_composite_dev *cdev)
 {
 	struct android_dev *dev = _android_dev;
 	struct usb_gadget	*gadget = cdev->gadget;
-	int			gcnum, id, product_id, ret;
+	int			id, product_id, ret;
+	int		status;
 
 	pr_debug("android_bind\n");
 
@@ -298,7 +538,9 @@ static int __devinit android_bind(struct usb_composite_dev *cdev)
 		pr_err("%s: usb_add_config failed\n", __func__);
 		return ret;
 	}
-
+#if 1
+	device_desc.bcdDevice = cpu_to_le16(0x0100);
+#else
 	gcnum = usb_gadget_controller_number(gadget);
 	if (gcnum >= 0)
 		device_desc.bcdDevice = cpu_to_le16(0x0200 + gcnum);
@@ -314,12 +556,18 @@ static int __devinit android_bind(struct usb_composite_dev *cdev)
 			longname, gadget->name);
 		device_desc.bcdDevice = __constant_cpu_to_le16(0x9999);
 	}
-
+#endif
 	usb_gadget_set_selfpowered(gadget);
 	dev->cdev = cdev;
 	product_id = get_product_id(dev);
 	device_desc.idProduct = __constant_cpu_to_le16(product_id);
 	cdev->desc.idProduct = device_desc.idProduct;
+
+	atomic_set(&open_excl, 0);
+
+	status = misc_register(&usbmode_device);
+	if (status)
+		return -EFAULT;
 
 	return 0;
 }
@@ -531,6 +779,7 @@ int android_enable_function(struct usb_function *f, int enable)
 			 * if we are using RNDIS.
 			 */
 			if (enable) {
+				dev->current_mode = 2;
 #ifdef CONFIG_USB_ANDROID_RNDIS_WCEIS
 				dev->cdev->desc.bDeviceClass = USB_CLASS_MISC;
 				dev->cdev->desc.bDeviceSubClass      = 0x02;
@@ -552,6 +801,10 @@ int android_enable_function(struct usb_function *f, int enable)
 		if (!strcmp(f->name, "mtp"))
 			android_config_functions(f, enable);
 #endif
+		if (!strcmp(f->name, "adb") && enable == 1 && dev->boot_mode == 2 && dev->init_flg == 1) {
+			dev->boot_pullup = 1;
+			android_usb_set_connected(1);
+                }
 
 		product_id = get_product_id(dev);
 		device_desc.idProduct = __constant_cpu_to_le16(product_id);
@@ -625,6 +878,7 @@ static int __init android_probe(struct platform_device *pdev)
 	struct android_usb_platform_data *pdata = pdev->dev.platform_data;
 	struct android_dev *dev = _android_dev;
 	int result;
+	char* smem_addr;
 
 	dev_dbg(&pdev->dev, "%s: pdata: %p\n", __func__, pdata);
 
@@ -662,13 +916,44 @@ static int __init android_probe(struct platform_device *pdev)
 					pdata->manufacturer_name;
 		if (pdata->serial_number)
 			strings_dev[STRING_SERIAL_IDX].s = pdata->serial_number;
+
+	}
+
+	INIT_WORK(&dev->mode_write_work, usb_mode_write_work);
+
+	f_diag_mode = 0;
+	dev->boot_mode = 0;
+	dev->init_flg = 0;
+        dev->boot_pullup = 0;
+	dev->current_mode = 0;
+
+	smem_addr = (char*)smem_alloc(SMEM_FACTORY_USB, 8);
+
+	if(!strcmp(smem_addr, "fact1") || !strcmp(smem_addr, "fact2")) {
+		pr_debug("------------ %s: Start Factory Mode:%s\n", __func__,smem_addr);
+		dev->boot_mode = (!strcmp(smem_addr, "fact1")) ? 1 : 2;
+		f_diag_mode = 1;
+		dev->current_mode = 2;
+		pdata->product_id = HS_PRODUCT_ID;
+		dev->product_id = pdata->product_id;
+		device_desc.idProduct =
+			__constant_cpu_to_le16(pdata->product_id);
+	} else {
+		pr_debug("++++++++++++ %s: Start Normal Mode \n", __func__);
 	}
 #ifdef CONFIG_DEBUG_FS
 	result = android_debugfs_init(dev);
 	if (result)
 		pr_debug("%s: android_debugfs_init failed\n", __func__);
 #endif
-	return usb_composite_register(&android_usb_driver);
+       	result = usb_composite_register(&android_usb_driver);
+
+	if (dev->boot_mode != 1) {
+		pr_debug("-- <%s> --  gadget disconnected (pull down)\n",__func__);
+		android_usb_set_connected(0);
+        }
+	return result;
+
 }
 
 static int andr_runtime_suspend(struct device *dev)

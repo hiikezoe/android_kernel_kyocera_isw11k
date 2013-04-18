@@ -2,6 +2,11 @@
 # Makefile for the linux kernel.
 #
 
+# For kc systemcall security, security enable only user build.
+ifneq ($(TARGET_BUILD_VARIANT),user)
+  KBUILD_CFLAGS += -DKCSYS_DEBUG_ENABLE
+endif
+
 obj-y     = sched.o fork.o exec_domain.o panic.o printk.o \
 	    cpu.o exit.o itimer.o time.o softirq.o resource.o \
 	    sysctl.o sysctl_binary.o capability.o ptrace.o timer.o user.o \

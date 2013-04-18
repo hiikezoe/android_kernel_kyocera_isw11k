@@ -1071,4 +1071,5 @@ restart_loop:
 		kfree(commit_transaction);
 
 	wake_up(&journal->j_wait_done_commit);
+
 }

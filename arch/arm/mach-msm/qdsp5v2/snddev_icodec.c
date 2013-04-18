@@ -15,6 +15,10 @@
  * 02110-1301, USA.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/msm-adie-codec.h>
@@ -179,13 +183,13 @@ static int snddev_icodec_open_rx(struct snddev_icodec_state *icodec)
 
 	wake_lock(&drv->rx_idlelock);
 
-	if ((icodec->data->acdb_id == ACDB_ID_HEADSET_SPKR_MONO) ||
-		(icodec->data->acdb_id == ACDB_ID_HEADSET_SPKR_STEREO)) {
-		/* Vote PMAPP_SMPS_MODE_VOTE_PFM for headset */
-		smps_mode = PMAPP_SMPS_MODE_VOTE_PFM;
-		MM_DBG("snddev_icodec_open_rx: PMAPP_SMPS_MODE_VOTE_PFM \n");
-	} else
-		MM_DBG("snddev_icodec_open_rx: PMAPP_SMPS_MODE_VOTE_PWM \n");
+//	if ((icodec->data->acdb_id == ACDB_ID_HEADSET_SPKR_MONO) ||
+//		(icodec->data->acdb_id == ACDB_ID_HEADSET_SPKR_STEREO)) {
+//		/* Vote PMAPP_SMPS_MODE_VOTE_PFM for headset */
+//		smps_mode = PMAPP_SMPS_MODE_VOTE_PFM;
+//		MM_DBG("snddev_icodec_open_rx: PMAPP_SMPS_MODE_VOTE_PFM \n");
+//	} else
+//		MM_DBG("snddev_icodec_open_rx: PMAPP_SMPS_MODE_VOTE_PWM \n");
 
 	/* Vote for SMPS mode*/
 	err = pmapp_smps_mode_vote(SMPS_AUDIO_PLAYBACK_ID,

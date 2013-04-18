@@ -1,8 +1,17 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
+#
 # Makefile for the input core drivers.
 #
 
 # Each configuration option enables a list of files.
+
+ifeq ($(TARGET_BUILD_VARIANT),eng)
+  KBUILD_CFLAGS += -DKEYLOG_ENABLE
+endif
 
 obj-$(CONFIG_KEYBOARD_AAED2000)		+= aaed2000_kbd.o
 obj-$(CONFIG_KEYBOARD_ADP5520)		+= adp5520-keys.o

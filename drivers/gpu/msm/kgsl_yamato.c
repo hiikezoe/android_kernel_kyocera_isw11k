@@ -120,13 +120,6 @@ static struct kgsl_yamato_device yamato_device = {
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
 		.iomemname = KGSL_3D0_REG_MEMORY,
-		.display_off = {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-#endif
-		},
 	},
 	.gmemspace = {
 		.gpu_base = 0,
@@ -266,15 +259,10 @@ irqreturn_t kgsl_yamato_isr(int irq, void *data)
 		result = IRQ_HANDLED;
 	}
 
-	if (device->requested_state == KGSL_STATE_NONE) {
-		if (device->pwrctrl.nap_allowed == true) {
-			device->requested_state = KGSL_STATE_NAP;
-			queue_work(device->work_queue, &device->idle_check_ws);
-		} else if (device->pwrctrl.idle_pass == true) {
-			queue_work(device->work_queue, &device->idle_check_ws);
-		}
+	if (device->pwrctrl.nap_allowed == true) {
+		device->requested_state = KGSL_STATE_NAP;
+		schedule_work(&device->idle_check_ws);
 	}
-
 	/* Reset the time-out in our idle timer */
 	mod_timer(&device->idle_timer,
 		jiffies + device->pwrctrl.interval_timeout);
@@ -550,13 +538,11 @@ static int kgsl_yamato_start(struct kgsl_device *device, unsigned int init_ram)
 
 	device->state = KGSL_STATE_INIT;
 	device->requested_state = KGSL_STATE_NONE;
-	/* Order pwrrail/clk sequence based upon platform. */
-	if (device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
+	/* Turn the clocks on before the power.  Required for some platforms,
+	   has no adverse effect on the others */
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_ON);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_ON);
-	if (!device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
+	kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
 
 	if (kgsl_mmu_start(device))
 		goto error_clk_off;
@@ -581,9 +567,9 @@ static int kgsl_yamato_start(struct kgsl_device *device, unsigned int init_ram)
 		kgsl_yamato_regwrite(device, REG_RBBM_SOFT_RESET, 0x00000001);
 
 	/* The core is in an indeterminate state until the reset completes
-	 * after 30ms.
+	 * after 10ms.
 	 */
-	msleep(30);
+	usleep_range(10000, 15000);
 
 	kgsl_yamato_regwrite(device, REG_RBBM_SOFT_RESET, 0x00000000);
 
@@ -677,12 +663,10 @@ static int kgsl_yamato_stop(struct kgsl_device *device)
 	kgsl_mmu_stop(device);
 
 	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
-	if (!device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_OFF);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_OFF);
+	/* For some platforms, power needs to go off before clocks */
+	kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_OFF);
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_OFF);
-	if (device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_OFF);
 
 	return 0;
 }
@@ -1225,55 +1209,6 @@ static long kgsl_yamato_ioctl(struct kgsl_device_private *dev_priv,
 
 }
 
-static inline s64 kgsl_yamato_ticks_to_us(u32 ticks, u32 gpu_freq)
-{
-	gpu_freq /= 1000000;
-	return ticks / gpu_freq;
-}
-
-static void kgsl_yamato_power_stats(struct kgsl_device *device,
-				struct kgsl_power_stats *stats)
-{
-	unsigned int reg;
-	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
-
-	/* In order to calculate idle you have to have run the algorithm *
-	 * at least once to get a start time. */
-	if (pwr->time != 0) {
-		s64 tmp;
-		/* Stop the performance moniter and read the current *
-		 * busy cycles. */
-		kgsl_yamato_regwrite(device,
-					REG_CP_PERFMON_CNTL,
-					REG_PERF_MODE_CNT |
-					REG_PERF_STATE_FREEZE);
-		kgsl_yamato_regread(device, REG_RBBM_PERFCOUNTER1_LO, &reg);
-		tmp = ktime_to_us(ktime_get());
-		stats->total_time = tmp - pwr->time;
-		pwr->time = tmp;
-		stats->busy_time  = kgsl_yamato_ticks_to_us(reg,
-				device->pwrctrl.
-				pwrlevels[device->pwrctrl.active_pwrlevel].
-				gpu_freq);
-		kgsl_yamato_regwrite(device,
-					REG_CP_PERFMON_CNTL,
-					REG_PERF_MODE_CNT |
-					REG_PERF_STATE_RESET);
-	} else {
-		stats->total_time = 0;
-		stats->busy_time = 0;
-		pwr->time = ktime_to_us(ktime_get());
-	}
-
-	/* re-enable the performance moniters */
-	kgsl_yamato_regread(device, REG_RBBM_PM_OVERRIDE2, &reg);
-	kgsl_yamato_regwrite(device, REG_RBBM_PM_OVERRIDE2, (reg | 0x40));
-	kgsl_yamato_regwrite(device, REG_RBBM_PERFCOUNTER1_SELECT, 0x1);
-	kgsl_yamato_regwrite(device,
-				REG_CP_PERFMON_CNTL,
-				REG_PERF_MODE_CNT | REG_PERF_STATE_ENABLE);
-}
-
 static void __devinit kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
 {
 	if (ftbl == NULL)
@@ -1298,7 +1233,6 @@ static void __devinit kgsl_yamato_getfunctable(struct kgsl_functable *ftbl)
 	ftbl->device_ioctl = kgsl_yamato_ioctl;
 	ftbl->device_setup_pt = kgsl_yamato_setup_pt;
 	ftbl->device_cleanup_pt = kgsl_yamato_cleanup_pt;
-	ftbl->device_power_stats = kgsl_yamato_power_stats;
 }
 
 static struct platform_device_id kgsl_3d_id_table[] = {

@@ -16,6 +16,11 @@
  *
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
@@ -36,6 +41,9 @@
 #include <linux/uaccess.h>
 #include <mach/clk.h>
 #include <mach/msm_xo.h>
+#include <linux/wait.h>
+#include <linux/workqueue.h>
+#include <mach/kc_changer_ic.h>
 
 #define MSM_USB_BASE	(dev->regs)
 #define USB_LINK_RESET_TIMEOUT	(msecs_to_jiffies(10))
@@ -45,6 +53,37 @@ static void msm_otg_set_vbus_state(int online);
 static void msm_otg_set_id_state(int online);
 
 struct msm_otg *the_msm_otg;
+
+int			changer_event = 0;
+int			changer_usb = 0;
+int                     boot_flg = 0;
+wait_queue_head_t	changer_wait;
+struct kc_changer_ic_event_callback cb;
+
+void kc_otg_changer_ic_event(kc_changer_ic_accessory_enum event)
+{
+	changer_event = 1; /* TRUE; */
+	if (event == KC_CHANGER_USB_MODE) {
+		changer_usb = 1; /* TRUE; */
+	} else if (event == KC_CHANGER_NO_ACCESSORY) {
+		changer_event = 0;
+		changer_usb = 0;
+	}
+	wake_up(&changer_wait);
+}
+
+static void kc_otg_changer_callback_wait(void)
+{
+	if (boot_flg) {
+		boot_flg = 0;
+		changer_usb = 1;
+	} else {
+		while(1) {
+			wait_event_interruptible(changer_wait, changer_event);
+			break;
+		}
+	}
+}
 
 static int is_host(void)
 {
@@ -573,6 +612,10 @@ static void msm_otg_start_peripheral(struct otg_transceiver *xceiv, int on)
 		return;
 
 	if (on) {
+		kc_otg_changer_callback_wait();
+		if (!changer_usb)
+			return;
+
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(USB_SWITCH_PERIPHERAL);
 		/* vote for minimum dma_latency to prevent idle
@@ -602,6 +645,8 @@ static void msm_otg_start_peripheral(struct otg_transceiver *xceiv, int on)
 		otg_pm_qos_update_latency(dev, 0);
 		if (pdata->setup_gpio)
 			pdata->setup_gpio(USB_SWITCH_DISABLE);
+		changer_event = 0;
+		changer_usb = 0;
 	}
 }
 
@@ -2538,6 +2583,15 @@ static int __init msm_otg_probe(struct platform_device *pdev)
 	INIT_WORK(&dev->otg_resume_work, msm_otg_resume_w);
 	spin_lock_init(&dev->lock);
 	wake_lock_init(&dev->wlock, WAKE_LOCK_SUSPEND, "msm_otg");
+
+        cb.fn = kc_otg_changer_ic_event;
+	kc_changer_ic_reg_cbfunc(&cb);
+	init_waitqueue_head(&changer_wait);
+	if(KC_CHANGER_USB_MODE == kc_changer_ic_get_accessory()) {
+		boot_flg = 1;
+	}
+	changer_event = 0;
+	changer_usb = 0;
 
 	dev->wq = create_singlethread_workqueue("k_otg");
 	if (!dev->wq) {

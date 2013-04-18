@@ -132,13 +132,6 @@ static struct kgsl_g12_device device_2d0 = {
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
 		.iomemname = KGSL_2D0_REG_MEMORY,
-		.display_off = {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-#endif
-		},
 	},
 };
 
@@ -179,13 +172,6 @@ static struct kgsl_g12_device device_2d1 = {
 		.state = KGSL_STATE_INIT,
 		.active_cnt = 0,
 		.iomemname = KGSL_2D1_REG_MEMORY,
-		.display_off = {
-#ifdef CONFIG_HAS_EARLYSUSPEND
-			.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING,
-			.suspend = kgsl_early_suspend_driver,
-			.resume = kgsl_late_resume_driver,
-#endif
-		},
 	},
 };
 
@@ -227,12 +213,10 @@ irqreturn_t kgsl_g12_isr(int irq, void *data)
 		}
 	}
 
-	if ((device->pwrctrl.nap_allowed == true) &&
-		(device->requested_state == KGSL_STATE_NONE)) {
+	if (device->pwrctrl.nap_allowed == true) {
 		device->requested_state = KGSL_STATE_NAP;
-		queue_work(device->work_queue, &device->idle_check_ws);
+		schedule_work(&device->idle_check_ws);
 	}
-
 	mod_timer(&device->idle_timer,
 			jiffies + device->pwrctrl.interval_timeout);
 
@@ -367,13 +351,9 @@ static int kgsl_g12_start(struct kgsl_device *device, unsigned int init_ram)
 	device->requested_state = KGSL_STATE_NONE;
 	KGSL_PWR_WARN(device, "state -> INIT, device %d\n", device->id);
 
-	/* Order pwrrail/clk sequence based upon platform. */
-	if (device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
+	kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_ON);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_ON);
-	if (!device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_ON);
 
 	/* Set up MH arbiter.  MH offsets are considered to be dword
 	 * based, therefore no down shift. */
@@ -414,12 +394,9 @@ static int kgsl_g12_stop(struct kgsl_device *device)
 	kgsl_mmu_stop(device);
 
 	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_IRQ_OFF);
-	if (!device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_OFF);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_AXI_OFF);
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_CLK_OFF);
-	if (device->pwrctrl.pwrrail_first)
-		kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_OFF);
+	kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_POWER_OFF);
 
 	return 0;
 }
@@ -754,13 +731,6 @@ static long kgsl_g12_ioctl(struct kgsl_device_private *dev_priv,
 
 }
 
-static void kgsl_g12_power_stats(struct kgsl_device *device,
-				struct kgsl_power_stats *stats)
-{
-	stats->total_time = 0;
-	stats->busy_time = 0;
-}
-
 static void kgsl_g12_getfunctable(struct kgsl_functable *ftbl)
 {
 
@@ -786,7 +756,6 @@ static void kgsl_g12_getfunctable(struct kgsl_functable *ftbl)
 	ftbl->device_ioctl = kgsl_g12_ioctl;
 	ftbl->device_setup_pt = kgsl_g12_setup_pt;
 	ftbl->device_cleanup_pt = kgsl_g12_cleanup_pt;
-	ftbl->device_power_stats = kgsl_g12_power_stats;
 }
 
 static struct platform_device_id kgsl_2d_id_table[] = {

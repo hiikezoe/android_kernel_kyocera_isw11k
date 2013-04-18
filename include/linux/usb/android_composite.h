@@ -14,6 +14,12 @@
  * GNU General Public License for more details.
  *
  */
+
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 #ifndef	__LINUX_USB_ANDROID_H
 #define	__LINUX_USB_ANDROID_H
 
@@ -68,6 +74,7 @@ struct android_usb_platform_data {
 	 */
 	int num_functions;
 	char **functions;
+	int boot_mode;
 };
 
 /* Platform data for "usb_mass_storage" driver. */

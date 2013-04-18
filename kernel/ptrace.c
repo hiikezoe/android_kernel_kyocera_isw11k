@@ -6,6 +6,10 @@
  * Common interfaces for "ptrace()" which we do not want
  * to continually duplicate across every architecture.
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/capability.h>
 #include <linux/module.h>
@@ -689,6 +693,16 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, long, addr, long, data)
 {
 	struct task_struct *child;
 	long ret;
+
+#ifdef CONFIG_SECURITY_KCSYS_PTRACE
+	if (current_uid() == 0) {
+		printk(KERN_ERR "%s: security no permission name=%s\n", __FUNCTION__, current->comm);
+#ifdef	KCSYS_DEBUG_ENABLE
+#else
+		return -EPERM;
+#endif	// KCSYS_DEBUG_ENABLE
+	}
+#endif	// CONFIG_SECURITY_KCSYS_PTRACE
 
 	if (request == PTRACE_TRACEME) {
 		ret = ptrace_traceme();

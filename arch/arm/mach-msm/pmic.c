@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* Copyright (c) 2009, 2011 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -120,6 +124,9 @@
 #define SPKR_BYPASS_EN_PROC 93
 #define HP_SPKR_AUX_IN_EN_PROC 94
 #define XO_CORE_FORCE_ENABLE 96
+#ifdef CONFIG_FEATURE_KCC_F45
+#define KC_MIC_IS_EN_PROC 100
+#endif
 
 /* rpc related */
 #define PMIC_RPC_TIMEOUT (5*HZ)
@@ -962,6 +969,13 @@ int pmic_mic_is_en(uint	*enabled)
 	return pmic_rpc_get_only(enabled, sizeof(*enabled), MIC_IS_EN_PROC);
 }
 EXPORT_SYMBOL(pmic_mic_is_en);
+#ifdef CONFIG_FEATURE_KCC_F45
+int pmic_kc_mic_is_en(uint	*enabled)
+{
+	return pmic_rpc_get_only(enabled, sizeof(*enabled), KC_MIC_IS_EN_PROC);
+}
+EXPORT_SYMBOL(pmic_kc_mic_is_en);
+#endif
 
 int pmic_mic_set_volt(enum mic_volt vol)
 {

@@ -14,6 +14,7 @@
 #include "xattr.h"
 #include "acl.h"
 
+
 /*
  * Convert from filesystem to in-memory representation.
  */
@@ -200,6 +201,7 @@ ext4_set_acl(handle_t *handle, struct inode *inode, int type,
 		if (acl) {
 			mode_t mode = inode->i_mode;
 			error = posix_acl_equiv_mode(acl, &mode);
+
 			if (error < 0)
 				return error;
 			else {
@@ -272,6 +274,7 @@ ext4_init_acl(handle_t *handle, struct inode *inode, struct inode *dir)
 		}
 		if (!acl)
 			inode->i_mode &= ~current_umask();
+
 	}
 	if (test_opt(inode->i_sb, POSIX_ACL) && acl) {
 		struct posix_acl *clone;

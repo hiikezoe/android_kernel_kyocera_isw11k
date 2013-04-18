@@ -1,3 +1,8 @@
+#/*
+# * This software is contributed or developed by KYOCERA Corporation.
+# * (C) 2011 KYOCERA Corporation
+# */
+
 obj-y += io.o dma.o memory.o
 obj-y += clock.o clock-voter.o clock-dummy.o
 obj-y += modem_notifier.o
@@ -179,6 +184,10 @@ obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-keypad.o board-sapphire-panel.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-mmc.o board-sapphire-wifi.o
 obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-rfkill.o msm_vibrator.o
 
+obj-$(CONFIG_FEATURE_KCC_F45) += kc_changer_ic.o
+obj-$(CONFIG_FEATURE_KCC_F45) += msm_vibrator.o
+obj-$(CONFIG_FEATURE_KCC_F45) += changer_dm_driver.o
+
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 
 obj-$(CONFIG_HTC_PWRSINK) += htc_pwrsink.o
@@ -215,3 +224,7 @@ obj-$(CONFIG_MSM_SHOW_RESUME_IRQ) += msm_show_resume_irq.o
 obj-$(CONFIG_BT_MSM_PINTEST)  += btpintest.o
 obj-$(CONFIG_ENABLE_ROMLITE)  += romlite_sec.o
 romlite_sec-objs := msm_romlite_sec.o msm_romlite_pa.o
+
+obj-$(CONFIG_FEATURE_KCC_F45) += kclog_smem.o
+
+obj-y	+= nv_kernel_io.o

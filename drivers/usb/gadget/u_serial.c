@@ -15,6 +15,11 @@
  * either version 2 of that License or (at your option) any later version.
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 /* #define VERBOSE_DEBUG */
 
 #include <linux/kernel.h>
@@ -53,7 +58,7 @@
  * is managed in userspace ... OBEX, PTP, and MTP have been mentioned.
  */
 
-#define PREFIX	"ttyGS"
+#define PREFIX	"ttyMDLM"
 
 /*
  * gserial is the lifecycle interface, used by USB functions
@@ -1461,3 +1466,114 @@ void gserial_disconnect(struct gserial *gser)
 	gs_free_requests(gser->in, &port->write_pool);
 	spin_unlock_irqrestore(&port->port_lock, flags);
 }
+
+/**
+ * diag_gs_connect - notify TTY I/O glue that USB link is active
+ * @gser: the function, set up with endpoints and descriptors
+ * @port_num: which port is active
+ * Context: any (usually from irq)
+ *
+ * This is called activate endpoints and let the TTY layer know that
+ * the connection is active ... not unlike "carrier detect".  It won't
+ * necessarily start I/O queues; unless the TTY is held open by any
+ * task, there would be no point.  However, the endpoints will be
+ * activated so the USB host can perform I/O, subject to basic USB
+ * hardware flow control.
+ *
+ * Caller needs to have set up the endpoints and USB function in @dev
+ * before calling this, as well as the appropriate (speed-specific)
+ * endpoint descriptors, and also have set up the TTY driver by calling
+ * @gserial_setup().
+ *
+ * Returns negative errno or zero.
+ * On success, ep->driver_data will be overwritten.
+ */
+int diag_gs_connect(struct gserial *gser, u8 port_num)
+{
+	struct gs_port	*port;
+	unsigned long	flags;
+	int		status = 0;
+
+	if (!gs_tty_driver || port_num >= n_ports)
+		return -ENXIO;
+
+	/* we "know" gserial_cleanup() hasn't been called */
+	port = ports[port_num].port;
+	gser->in->driver_data = port;
+	gser->out->driver_data = port;
+
+	/* then tell the tty glue that I/O can work */
+	spin_lock_irqsave(&port->port_lock, flags);
+	gser->ioport = port;
+	port->port_usb = gser;
+
+	/* REVISIT unclear how best to handle this state...
+	 * we don't really couple it with the Linux TTY.
+	 */
+	gser->port_line_coding = port->port_line_coding;
+
+	/* REVISIT if waiting on "carrier detect", signal. */
+
+	/* if it's already open, start I/O ... and notify the serial
+	 * protocol about open/close status (connect/disconnect).
+	 */
+	if (port->open_count) {
+		gs_start_io(port);
+		if (gser->connect)
+			gser->connect(gser);
+	} else {
+		if (gser->disconnect)
+			gser->disconnect(gser);
+	}
+
+	spin_unlock_irqrestore(&port->port_lock, flags);
+
+	return status;
+}
+
+/**
+ * diag_gs_disconnect - notify TTY I/O glue that USB link is inactive
+ * @gser: the function, on which gserial_connect() was called
+ * Context: any (usually from irq)
+ *
+ * This is called to deactivate endpoints and let the TTY layer know
+ * that the connection went inactive ... not unlike "hangup".
+ *
+ * On return, the state is as if gserial_connect() had never been called;
+ * there is no active USB I/O on these endpoints.
+ */
+void diag_gs_disconnect(struct gserial *gser)
+{
+	struct gs_port	*port = gser->ioport;
+	unsigned long	flags;
+
+	if (!port)
+		return;
+
+	/* tell the TTY glue not to do I/O here any more */
+	spin_lock_irqsave(&port->port_lock, flags);
+
+	/* REVISIT as above: how best to track this? */
+	port->port_line_coding = gser->port_line_coding;
+
+	port->port_usb = NULL;
+	gser->ioport = NULL;
+	if (port->open_count > 0 || port->openclose) {
+		wake_up_interruptible(&port->drain_wait);
+		if (port->port_tty)
+			tty_hangup(port->port_tty);
+	}
+	spin_unlock_irqrestore(&port->port_lock, flags);
+
+	/* finally, free any unused/unusable I/O buffers */
+	spin_lock_irqsave(&port->port_lock, flags);
+	usb_ep_fifo_flush(gser->out);
+	usb_ep_fifo_flush(gser->in);
+	if (port->open_count == 0 && !port->openclose)
+		gs_buf_free(&port->port_write_buf);
+	gs_free_requests(gser->out, &port->read_pool);
+	gs_free_requests(gser->out, &port->read_queue);
+	gs_free_requests(gser->in, &port->write_pool);
+	spin_unlock_irqrestore(&port->port_lock, flags);
+}
+

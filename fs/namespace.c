@@ -1683,7 +1683,6 @@ static int do_new_mount(struct path *path, char *type, int flags,
 	unlock_kernel();
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
-
 	return do_add_mount(mnt, path, mnt_flags, NULL);
 }
 
@@ -2000,6 +1999,8 @@ long do_mount(char *dev_name, char *dir_name, char *type_page,
 	else
 		retval = do_new_mount(&path, type_page, flags, mnt_flags,
 				      dev_name, data_page);
+
+
 dput_out:
 	path_put(&path);
 	return retval;

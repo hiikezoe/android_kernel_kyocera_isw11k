@@ -22,6 +22,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
+
 /* #define VERBOSE_DEBUG */
 
 #include <linux/slab.h>
@@ -196,8 +201,7 @@ static struct usb_interface_assoc_descriptor
 rndis_iad_descriptor = {
 	.bLength =		sizeof rndis_iad_descriptor,
 	.bDescriptorType =	USB_DT_INTERFACE_ASSOCIATION,
-
-	.bFirstInterface =	0, /* XXX, hardcoded */
+	.bFirstInterface =	1, /* XXX, hardcoded */
 	.bInterfaceCount = 	2,	// control + data
 #if defined(CONFIG_USB_ANDROID_RNDIS_WCEIS) || \
     defined(CONFIG_USB_MAEMO_RNDIS_WCEIS)
@@ -304,9 +308,11 @@ static struct usb_descriptor_header *eth_hs_function[] = {
 /* string descriptors: */
 
 static struct usb_string rndis_string_defs[] = {
+#if 0
 	[0].s = "RNDIS Communications Control",
 	[1].s = "RNDIS Ethernet Data",
-	[2].s = "RNDIS",
+#endif
+	[0].s = "au ISW11K",
 	{  } /* end of list */
 };
 
@@ -831,6 +837,7 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 		if (status < 0)
 			return status;
 
+#if 0
 		/* control interface label */
 		status = usb_string_id(c->cdev);
 		if (status < 0)
@@ -844,12 +851,12 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 			return status;
 		rndis_string_defs[1].id = status;
 		rndis_data_intf.iInterface = status;
-
+#endif
 		/* IAD iFunction label */
 		status = usb_string_id(c->cdev);
 		if (status < 0)
 			return status;
-		rndis_string_defs[2].id = status;
+		rndis_string_defs[0].id = status;
 		rndis_iad_descriptor.iFunction = status;
 	}
 

@@ -699,10 +699,6 @@ static unsigned int *build_gmem2sys_cmds(struct kgsl_device *device,
 	*cmds++ = PM4_REG(REG_PA_SC_AA_MASK);
 	*cmds++ = 0x0000ffff;	/* REG_PA_SC_AA_MASK */
 
-	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-	*cmds++ = PM4_REG(REG_RB_COLORCONTROL);
-	*cmds++ = 0x00000c20;
-
 	/* load the patched vertex shader stream */
 	cmds = program_shader(cmds, 0, gmem2sys_vtx_pgm, GMEM2SYS_VTX_PGM_LEN);
 
@@ -784,19 +780,6 @@ static unsigned int *build_gmem2sys_cmds(struct kgsl_device *device,
 	*cmds++ = 0xbf800000;	/* -1.0f */
 	*cmds++ = 0x0;
 
-	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-	*cmds++ = PM4_REG(REG_RB_COLOR_MASK);
-	*cmds++ = 0x0000000f;	/* R = G = B = 1:enabled */
-
-	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-	*cmds++ = PM4_REG(REG_RB_COLOR_DEST_MASK);
-	*cmds++ = 0xffffffff;
-
-	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 3);
-	*cmds++ = PM4_REG(REG_SQ_WRAPPING_0);
-	*cmds++ = 0x00000000;
-	*cmds++ = 0x00000000;
-
 	/* load the stencil ref value
 	 * $AAM - do this later
 	 */
@@ -820,16 +803,6 @@ static unsigned int *build_gmem2sys_cmds(struct kgsl_device *device,
 	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
 	*cmds++ = PM4_REG(REG_RB_MODECONTROL);
 	*cmds++ = 0x6;		/* EDRAM copy */
-
-	if (device->chip_id == KGSL_CHIPID_LEIA_REV470) {
-		*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-		*cmds++ = PM4_REG(REG_LEIA_RB_LRZ_VSC_CONTROL);
-		*cmds++ = 0;
-	}
-
-	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-	*cmds++ = PM4_REG(REG_PA_CL_CLIP_CNTL);
-	*cmds++ = 0x00010000;
 
 	if (device->chip_id == KGSL_CHIPID_LEIA_REV470) {
 		*cmds++ = 0xc0043600; /* packet 3 3D_DRAW_INDX_2 */
@@ -1040,16 +1013,6 @@ static unsigned int *build_sys2gmem_cmds(struct kgsl_device *device,
 	*cmds++ = PM4_REG(REG_RB_MODECONTROL);
 	/* draw pixels with color and depth/stencil component */
 	*cmds++ = 0x4;
-
-	if (device->chip_id == KGSL_CHIPID_LEIA_REV470) {
-		*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-		*cmds++ = PM4_REG(REG_LEIA_RB_LRZ_VSC_CONTROL);
-		*cmds++ = 0;
-	}
-
-	*cmds++ = pm4_type3_packet(PM4_SET_CONSTANT, 2);
-	*cmds++ = PM4_REG(REG_PA_CL_CLIP_CNTL);
-	*cmds++ = 0x00010000;
 
 	if (device->chip_id == KGSL_CHIPID_LEIA_REV470) {
 		*cmds++ = 0xc0043600; /* packet 3 3D_DRAW_INDX_2 */
@@ -1681,13 +1644,6 @@ kgsl_drawctxt_switch(struct kgsl_yamato_device *yamato_device,
 
 		KGSL_CTXT_INFO(device,
 			"drawctxt flags %08x\n", drawctxt->flags);
-		cmds[0] = pm4_nop_packet(1);
-		cmds[1] = KGSL_CONTEXT_TO_MEM_IDENTIFIER;
-		cmds[2] = pm4_type3_packet(PM4_MEM_WRITE, 2);
-		cmds[3] = device->memstore.gpuaddr +
-				KGSL_DEVICE_MEMSTORE_OFFSET(current_context);
-		cmds[4] = (unsigned int)yamato_device->drawctxt_active;
-		kgsl_ringbuffer_issuecmds(device, 0, cmds, 5);
 		kgsl_mmu_setstate(device, drawctxt->pagetable);
 
 #ifndef CONFIG_MSM_KGSL_CFF_DUMP_NO_CONTEXT_MEM_DUMP
@@ -1696,6 +1652,13 @@ kgsl_drawctxt_switch(struct kgsl_yamato_device *yamato_device,
 			REG_SHADOW_SIZE + CMD_BUFFER_SIZE + TEX_SHADOW_SIZE,
 			false);
 #endif
+		cmds[0] = pm4_nop_packet(1);
+		cmds[1] = KGSL_CONTEXT_TO_MEM_IDENTIFIER;
+		cmds[2] = pm4_type3_packet(PM4_MEM_WRITE, 2);
+		cmds[3] = device->memstore.gpuaddr +
+				KGSL_DEVICE_MEMSTORE_OFFSET(current_context);
+		cmds[4] = (unsigned int)yamato_device->drawctxt_active;
+		kgsl_ringbuffer_issuecmds(device, 0, cmds, 5);
 
 		/* restore gmem.
 		 *  (note: changes shader. shader must not already be restored.)

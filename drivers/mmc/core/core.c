@@ -1,6 +1,9 @@
 /*
  *  linux/drivers/mmc/core/core.c
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ *
  *  Copyright (C) 2003-2004 Russell King, All Rights Reserved.
  *  SD support Copyright (C) 2004 Ian Molton, All Rights Reserved.
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
@@ -38,6 +41,8 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 #include <linux/pm.h>
+
+static int mmc_wifi_power = 0;
 
 static struct workqueue_struct *workqueue;
 static struct wake_lock mmc_delayed_work_wake_lock;
@@ -301,7 +306,7 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	/*
 	 * SD cards use a 100 multiplier rather than 10
 	 */
-	mult = mmc_card_sd(card) ? 100 : 10;
+	mult = mmc_card_sd(card) ? 100 : mmc_card_sdio(card) ? 10 : 100;
 
 	/*
 	 * Scale up the multiplier (and therefore the timeout) by
@@ -1121,6 +1126,12 @@ void mmc_detect_change(struct mmc_host *host, unsigned long delay)
 EXPORT_SYMBOL(mmc_detect_change);
 
 
+void mmc_set_wifi_power(int power)
+{
+	mmc_wifi_power = power;
+}
+EXPORT_SYMBOL(mmc_set_wifi_power);
+
 void mmc_rescan(struct work_struct *work)
 {
 	struct mmc_host *host =
@@ -1186,7 +1197,12 @@ void mmc_rescan(struct work_struct *work)
 	/*
 	 * First we search for SDIO...
 	 */
-	err = mmc_send_io_op_cond(host, 0, &ocr);
+	if ((mmc_wifi_power == 0) && (host->index == 2)) {
+		err = 1;
+	}
+    else {
+		err = mmc_send_io_op_cond(host, 0, &ocr);
+    }
 	if (!err) {
 		if (mmc_attach_sdio(host, ocr))
 			mmc_power_off(host);

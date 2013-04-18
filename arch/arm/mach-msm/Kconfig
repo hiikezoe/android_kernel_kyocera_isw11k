@@ -1,4 +1,102 @@
+#/*
+# * This software is contributed or developed by KYOCERA Corporation.
+# * (C) 2011 KYOCERA Corporation
+# */
+
+
 if ARCH_MSM
+
+
+menu "KCC Define Selection"
+config FEATURE_KCC_TEMP
+	default y
+	bool "FEATURE_KCC_TEMP"
+
+config FEATURE_KCC_F45
+	default y
+	bool "FEATURE_KCC_F45"
+
+
+config MACH_MSM8655_KC_F41_F45
+       default y
+       bool "MACH_MSM8655_KC_F41_F45"
+       help
+         Support F41/F45 model for KCR.
+
+config MACH_MSM8655_KC_F41_GPIOS
+       default y
+       bool "MACH_MSM8655_KC_F41_GPIOS"
+       help
+         Support GPIO of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_PMIC
+       default y
+       bool "MACH_MSM8655_KC_F41_PMIC"
+       help
+	Support PMIC of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_KBD
+       default y
+       bool "MACH_MSM8655_KC_F41_KBD"
+       help
+	Support KBD of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_QUP
+       default y
+       bool "MACH_MSM8655_KC_F41_QUP"
+       help
+	Support QUP of F41 model for KCR.
+
+
+config MACH_MSM8655_KC_F41_ML8953B
+       default n
+       bool "MACH_MSM8655_KC_F41_ML8953B"
+       help
+	Support ML8953B device of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_ML8953B_HSDT004A
+	tristate "HSCDTD004A Magnetic Field Sensor & ML8953B Acceleration Sensor Drive"
+	default n
+	help
+	 HSCDTD004A Magnetic Field Sensor & ML8953B Acceleration Sensor Driver of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_KXUD9
+       default y
+       bool "MACH_MSM8655_KC_F41_KXUD9"
+       help
+	Support KXUD9 device of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_KXUD9_HSDT004A
+	tristate "HSCDTD004A Magnetic Field Sensor & KXUD9 Acceleration Sensor Drive"
+	default m
+	help
+	 HSCDTD004A Magnetic Field Sensor & KXUD9 Acceleration Sensor Driver of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_HSDT004A
+       default y
+       bool "MACH_MSM8655_KC_F41_HSDT004A"
+       help
+	Support HSDT004A device of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_GP2AP003A10F
+	tristate "GP2AP003A10F Proximity/Light Sensor Driver"
+	default m
+	help
+	 GP2AP002A00F Proximity/Light Sensor Driver of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_LV5207LP
+       tristate "LV5207LP Driver"
+       default y
+       help
+	Support LV5207LP device of F41 model for KCR.
+
+config MACH_MSM8655_KC_F41_GPIO129_KEYLED
+       tristate "GPIO129_KEYLED"
+       default n
+       help
+    Support Key Led GPIO of F41 model for KCR.
+
+endmenu
 
 choice
 	prompt "MSM SoC Type"
@@ -35,15 +133,7 @@ config ARCH_MSM7X30
 	select MSM_VIC
 	select CPU_V7
 	select MSM_REMOTE_SPINLOCK_DEKKERS
-	select ARCH_SPARSEMEM_ENABLE
-	select MEMORY_HOTPLUG
-	select MEMORY_HOTREMOVE
-	select MIGRATION
-	select ARCH_MEMORY_PROBE
-	select ARCH_MEMORY_REMOVE
-	select DONT_RESERVE_FROM_MOVABLE_ZONE
 	select MSM_GPIOMUX
-	select RESERVE_FIRST_PAGE
 	select MSM_DALRPC
 
 config ARCH_QSD8X50

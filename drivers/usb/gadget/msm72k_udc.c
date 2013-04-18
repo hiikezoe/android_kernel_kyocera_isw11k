@@ -17,6 +17,11 @@
  *
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -55,6 +60,7 @@ static const char driver_name[] = "msm72k_udc";
 
 #define	DRIVER_DESC		"MSM 72K USB Peripheral Controller"
 #define	DRIVER_NAME		"MSM72K_UDC"
+#define CABLE_DEVICE_NAME	"usb_cable"
 
 #define EPT_FLAG_IN        0x0001
 
@@ -195,6 +201,7 @@ struct usb_info {
 	struct usb_gadget		gadget;
 	struct usb_gadget_driver	*driver;
 	struct switch_dev sdev;
+	struct switch_dev sdev_cable;
 
 #define ep0out ept[0]
 #define ep0in  ept[16]
@@ -277,6 +284,16 @@ static ssize_t print_switch_name(struct switch_dev *sdev, char *buf)
 static ssize_t print_switch_state(struct switch_dev *sdev, char *buf)
 {
 	return sprintf(buf, "%s\n", sdev->state ? "online" : "offline");
+}
+
+static ssize_t print_switch_cable_name(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%s\n", CABLE_DEVICE_NAME);
+}
+
+static ssize_t print_switch_cable_state(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%s\n", sdev->state ? "1" : "0");
 }
 
 static inline enum chg_type usb_get_chg_type(struct usb_info *ui)
@@ -1416,6 +1433,8 @@ static int usb_free(struct usb_info *ui, int ret)
 		dma_pool_destroy(ui->pool);
 	if (ui->dma)
 		dma_free_coherent(&ui->pdev->dev, 4096, ui->buf, ui->dma);
+	if (!strcmp(ui->sdev.name, DRIVER_NAME))
+		switch_dev_unregister(&ui->sdev);
 	kfree(ui);
 	return ret;
 }
@@ -2102,6 +2121,8 @@ static int msm72k_udc_vbus_session(struct usb_gadget *_gadget, int is_active)
 	struct usb_info *ui = container_of(_gadget, struct usb_info, gadget);
 	struct msm_otg *otg = to_msm_otg(ui->xceiv);
 
+	switch_set_state(&ui->sdev_cable, is_active);
+
 	if (is_active || atomic_read(&otg->chg_type)
 					 == USB_CHG_TYPE__WALLCHARGER)
 		wake_lock(&ui->wlock);
@@ -2442,6 +2463,14 @@ static int msm72k_probe(struct platform_device *pdev)
 	if (retval)
 		return usb_free(ui, retval);
 
+	ui->sdev_cable.name = CABLE_DEVICE_NAME;
+	ui->sdev_cable.print_name = print_switch_cable_name;
+	ui->sdev_cable.print_state = print_switch_cable_state;
+
+	retval = switch_dev_register(&ui->sdev_cable);
+	if (retval)
+		return usb_free(ui, retval);
+
 	the_usb_info = ui;
 
 	wake_lock_init(&ui->wlock,
@@ -2466,6 +2495,7 @@ static int msm72k_probe(struct platform_device *pdev)
 			"%s: Cannot bind the transceiver, retval:(%d)\n",
 			__func__, retval);
 		switch_dev_unregister(&ui->sdev);
+		switch_dev_unregister(&ui->sdev_cable);
 		wake_lock_destroy(&ui->wlock);
 		return usb_free(ui, retval);
 	}

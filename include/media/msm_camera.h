@@ -559,7 +559,10 @@ struct msm_snapshot_pp_status {
 #define CFG_SENSOR_INIT    29
 #define CFG_GET_3D_CALI_DATA 30
 #define CFG_GET_CALIB_DATA		31
-#define CFG_MAX			32
+#define CFG_I2C_WRITE			32
+#define CFG_I2C_READ			33
+#define CFG_WAIT_INTERRPUT		34
+#define CFG_MAX				35
 
 
 #define MOVE_NEAR	0
@@ -666,6 +669,30 @@ struct sensor_calib_data {
 	uint16_t af_pos_inf;
 };
 
+struct sensor_i2c_wr_cfg {
+	uint8_t len;
+	uint8_t accsess_code;
+	uint8_t id;
+	uint8_t reg_addr;
+	uint8_t *write_data_ptr;
+};
+
+struct sensor_i2c_rd_cfg {
+	uint8_t len;
+	uint8_t reg_addr;
+	uint8_t *read_data_ptr;
+};
+
+struct sensor_pmic_cfg {
+	const char *id;
+	uint8_t ctl;
+};
+
+struct sensor_gpio_cfg {
+	uint8_t port;
+	uint8_t ctl;
+};
+
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
@@ -689,6 +716,12 @@ struct sensor_cfg_data {
 		struct wb_info_cfg wb_info;
 		struct sensor_3d_exp_cfg sensor_3d_exp;
 		struct sensor_calib_data calib_info;
+		struct sensor_i2c_wr_cfg i2c_wr_cfg;
+		struct sensor_i2c_rd_cfg i2c_rd_cfg;
+		int8_t mclk_ctl;
+		struct sensor_pmic_cfg pmic_cfg;
+		struct sensor_gpio_cfg gpio_cfg;
+		uint32_t wait_timeout_ms;
 	} cfg;
 };
 

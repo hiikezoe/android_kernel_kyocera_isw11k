@@ -183,6 +183,23 @@ struct msm_camera_sensor_info {
 	char *eeprom_data;
 };
 
+#ifdef CONFIG_MLM1183
+struct msm_camera_sensor_info_mlm1183 {
+	struct msm_camera_sensor_info sensor_info;
+	const char *vcmd_pwd;
+	const char *vcma_pwd;
+	const char *vcmaf_pwd;
+};
+#endif
+
+#ifdef CONFIG_RJ6CBA100
+struct msm_camera_sensor_info_rj6cba100 {
+	struct msm_camera_sensor_info sensor_info;
+	const char *vcmd_pwd;
+	const char *vcma_pwd;
+};
+#endif
+
 struct clk;
 
 struct snd_endpoint {

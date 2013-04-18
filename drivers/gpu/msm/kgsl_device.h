@@ -37,7 +37,6 @@
 #include <linux/msm_kgsl.h>
 #include <linux/idr.h>
 #include <linux/wakelock.h>
-#include <linux/earlysuspend.h>
 
 #include <asm/atomic.h>
 
@@ -80,7 +79,6 @@ struct kgsl_device;
 struct platform_device;
 struct kgsl_device_private;
 struct kgsl_context;
-struct kgsl_power_stats;
 
 struct kgsl_functable {
 	void (*device_regread) (struct kgsl_device *device,
@@ -130,8 +128,7 @@ struct kgsl_functable {
 
 	int (*device_cleanup_pt)(struct kgsl_device *device,
 				 struct kgsl_pagetable *pagetable);
-	void (*device_power_stats)(struct kgsl_device *device,
-		struct kgsl_power_stats *stats);
+
 };
 
 struct kgsl_memregion {
@@ -159,7 +156,7 @@ struct kgsl_device {
 	struct work_struct idle_check_ws;
 	struct timer_list idle_timer;
 	struct kgsl_pwrctrl pwrctrl;
-	int open_count;
+	atomic_t open_count;
 
 	struct atomic_notifier_head ts_notifier_list;
 	struct mutex mutex;
@@ -176,7 +173,6 @@ struct kgsl_device {
 	struct completion recovery_gate;
 	struct dentry *d_debugfs;
 	struct idr context_idr;
-	struct early_suspend display_off;
 
 	/* Logging levels */
 	int cmd_log;
@@ -230,11 +226,6 @@ struct kgsl_devconfig {
 	unsigned int     va_range;
 
 	struct kgsl_memregion gmemspace;
-};
-
-struct kgsl_power_stats {
-	s64 total_time;
-	s64 busy_time;
 };
 
 struct kgsl_device *kgsl_get_device(int dev_idx);

@@ -1,4 +1,9 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
+#
 # Misc strange devices
 #
 
@@ -450,6 +455,11 @@ config TSIF_DEBUG
 	---help---
 	  This turns on debugging information for the tsif driver
 
+config DTVTUNER_PM
+	bool "dtvtuner_pm"
+	depends on ARCH_MSM
+	default m
+
 config HAPTIC_ISA1200
 	tristate "ISA1200 haptic support"
 	depends on I2C
@@ -526,6 +536,13 @@ config TZCOM
 	  Provides a communication interface between userspace and
 	  TrustZone Operating Environment (TZBSP) using Secure Channel
 	  Manager (SCM) interface.
+
+config MMC_MSM_FOTA
+	bool "kc_fota_emmc_driver"
+	depends on MMC
+	default m
+
+
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

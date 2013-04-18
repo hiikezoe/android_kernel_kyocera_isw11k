@@ -9,6 +9,11 @@
  * either version 2 of that License or (at your option) any later version.
  */
 
+/*
+ *This software is contributed or developed by KYOCERA Corporation.
+ *(C) 2011 KYOCERA Corporation
+ */
+
 #ifndef __U_SERIAL_H
 #define __U_SERIAL_H
 
@@ -70,6 +75,9 @@ void gserial_cleanup(void);
 /* connect/disconnect is handled by individual functions */
 int gserial_connect(struct gserial *, u8 port_num);
 void gserial_disconnect(struct gserial *);
+int diag_gs_connect(struct gserial *, u8 port_num);
+void diag_gs_disconnect(struct gserial *);
+
 
 #if defined(CONFIG_USB_F_SERIAL_SDIO) || defined(CONFIG_USB_ANDROID_ACM_SDIO)
 /* sdio related functions */

@@ -28,10 +28,10 @@ DEFINE_SPINLOCK(key_serial_lock);
 struct rb_root	key_user_tree; /* tree of quota records indexed by UID */
 DEFINE_SPINLOCK(key_user_lock);
 
-unsigned int key_quota_root_maxkeys = 200;	/* root's key count quota */
-unsigned int key_quota_root_maxbytes = 20000;	/* root's key space quota */
-unsigned int key_quota_maxkeys = 200;		/* general key count quota */
-unsigned int key_quota_maxbytes = 20000;	/* general key space quota */
+unsigned int key_quota_root_maxkeys = CONFIG_KEYS_QUOTA_ROOT_MAX_KEYS;
+unsigned int key_quota_root_maxbytes = CONFIG_KEYS_QUOTA_ROOT_MAX_BYTES;
+unsigned int key_quota_maxkeys = CONFIG_KEYS_QUOTA_MAX_KEYS;
+unsigned int key_quota_maxbytes = CONFIG_KEYS_QUOTA_MAX_BYTES;
 
 static LIST_HEAD(key_types_list);
 static DECLARE_RWSEM(key_types_sem);
