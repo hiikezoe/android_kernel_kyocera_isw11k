@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.35.11
-# Thu Apr 18 21:32:29 2013
+# Fri Apr 19 18:13:11 2013
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1067,6 +1067,7 @@ CONFIG_PMIC8058_UPL=y
 # CONFIG_PMIC8058_BATTALARM is not set
 # CONFIG_TZCOM is not set
 CONFIG_MMC_MSM_FOTA=y
+CONFIG_MMC_MSM_WRITE_PROTECT=y
 # CONFIG_C2PORT is not set
 
 #
