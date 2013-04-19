@@ -24,7 +24,7 @@
  * this needs to be before <linux/kernel.h> is loaded,
  * and <linux/sched.h> loads <linux/kernel.h>
  */
-#define DEBUG  1
+#define DEBUG  0
 
 #include <linux/slab.h>
 #include <linux/earlysuspend.h>
@@ -675,6 +675,7 @@ static u32 nv_vbatt_thr_cal_v[] =
   0x00081268,
 };
 
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void save_adjust_nv_work_handler(struct work_struct *work)
 {
 	u32 ret = 0;
@@ -707,7 +708,6 @@ static void msm_batt_save_adjust_nv(void)
 	}
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void msm_batt_update_psy_status(void)
 {
 	u32 charger_status;
