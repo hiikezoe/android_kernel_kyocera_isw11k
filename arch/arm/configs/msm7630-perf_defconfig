@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.35.11
-# Fri Apr 19 18:13:11 2013
+# Fri Apr 19 18:27:00 2013
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -2389,6 +2389,7 @@ CONFIG_ANDROID_LOW_MEMORY_KILLER=y
 # Qualcomm MSM specific device drivers
 #
 # CONFIG_MSM_SSBI is not set
+CONFIG_SD_CARD_GPIO_CONTROL=y
 
 #
 # File systems
