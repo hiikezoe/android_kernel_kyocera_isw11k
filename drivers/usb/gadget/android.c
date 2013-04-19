@@ -948,10 +948,6 @@ static int __init android_probe(struct platform_device *pdev)
 #endif
        	result = usb_composite_register(&android_usb_driver);
 
-	if (dev->boot_mode != 1) {
-		pr_debug("-- <%s> --  gadget disconnected (pull down)\n",__func__);
-		android_usb_set_connected(0);
-        }
 	return result;
 
 }
