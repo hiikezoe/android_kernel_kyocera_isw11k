@@ -1401,7 +1401,6 @@ sha_error:
 	return -EINVAL;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int qcedev_ioctl(struct inode *inode, struct file *file,
 			  unsigned cmd, unsigned long arg)
 {

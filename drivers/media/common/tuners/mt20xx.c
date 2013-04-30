@@ -426,7 +426,6 @@ static int mt2032_init(struct dvb_frontend *fe)
 	return(1);
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void mt2050_set_antenna(struct dvb_frontend *fe, unsigned char antenna)
 {
 	struct microtune_priv *priv = fe->tuner_priv;

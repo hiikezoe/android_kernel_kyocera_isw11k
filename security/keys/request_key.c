@@ -94,7 +94,6 @@ static int call_usermodehelper_keys(char *path, char **argv, char **envp,
  * request userspace finish the construction of a key
  * - execute "/sbin/request-key <op> <key> <uid> <gid> <keyring> <keyring> <keyring>"
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int call_sbin_request_key(struct key_construction *cons,
 				 const char *op,
 				 void *aux)

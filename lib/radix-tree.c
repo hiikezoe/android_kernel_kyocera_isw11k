@@ -569,7 +569,6 @@ EXPORT_SYMBOL(radix_tree_tag_clear);
  * the RCU lock is held, unless tag modification and node deletion are excluded
  * from concurrency.
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int radix_tree_tag_get(struct radix_tree_root *root,
 			unsigned long index, unsigned int tag)
 {

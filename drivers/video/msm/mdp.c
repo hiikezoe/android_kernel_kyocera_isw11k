@@ -133,7 +133,6 @@ static struct early_suspend early_suspend;
 #endif
 
 #ifndef CONFIG_FB_MSM_MDP22
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 DEFINE_MUTEX(mdp_lut_push_sem);
 static int mdp_lut_i;
 static int mdp_lut_hw_update(struct fb_cmap *cmap)

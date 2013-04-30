@@ -122,7 +122,6 @@ static int print_lock_stat(struct seq_file *m, struct wake_lock *lock)
 		     ktime_to_ns(lock->stat.last_time));
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int wakelock_stats_show(struct seq_file *m, void *unused)
 {
 	unsigned long irqflags;

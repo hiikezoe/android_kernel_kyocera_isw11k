@@ -130,7 +130,6 @@ u32 vcd_sched_add_client(struct vcd_clnt_ctxt *cctxt)
 	return rc;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 u32 vcd_sched_remove_client(struct vcd_sched_clnt_ctx *sched_cctxt)
 {
 	u32 rc = VCD_S_SUCCESS;

@@ -37,7 +37,6 @@ static void xfrm6_beet_make_header(struct sk_buff *skb)
  *
  * The top IP header will be constructed per draft-nikander-esp-beet-mode-06.txt.
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int xfrm6_beet_output(struct xfrm_state *x, struct sk_buff *skb)
 {
 	struct ipv6hdr *top_iph;

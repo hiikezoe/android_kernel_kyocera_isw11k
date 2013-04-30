@@ -935,7 +935,6 @@ exit:
 	spin_unlock_irq(&port->port_lock);
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int gs_write(struct tty_struct *tty, const unsigned char *buf, int count)
 {
 	struct gs_port	*port = tty->driver_data;

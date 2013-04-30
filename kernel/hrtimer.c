@@ -1100,7 +1100,6 @@ EXPORT_SYMBOL_GPL(hrtimer_cancel);
  * hrtimer_get_remaining - get remaining time for the timer
  * @timer:	the timer to read
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 ktime_t hrtimer_get_remaining(const struct hrtimer *timer)
 {
 	struct hrtimer_clock_base *base;

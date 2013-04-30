@@ -141,7 +141,6 @@ static int mdp_reg_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static ssize_t mdp_reg_write(
 	struct file *file,
 	const char __user *buff,

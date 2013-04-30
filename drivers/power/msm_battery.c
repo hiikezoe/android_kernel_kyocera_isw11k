@@ -675,7 +675,6 @@ static u32 nv_vbatt_thr_cal_v[] =
   0x00081268,
 };
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void save_adjust_nv_work_handler(struct work_struct *work)
 {
 	u32 ret = 0;

@@ -827,7 +827,6 @@ static inline int resize_screen(struct vc_data *vc, int width, int height,
  *	ctrl_lock of the tty IFF a tty is passed.
  */
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 				unsigned int cols, unsigned int lines)
 {

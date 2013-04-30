@@ -339,7 +339,6 @@ static const struct file_operations snd_shutdown_f_ops =
  *  Note: The current implementation replaces all active file->f_op with special
  *        dummy file operations (they do nothing except release).
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int snd_card_disconnect(struct snd_card *card)
 {
 	struct snd_monitor_file *mfile;

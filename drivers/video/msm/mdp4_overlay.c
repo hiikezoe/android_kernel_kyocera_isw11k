@@ -366,7 +366,6 @@ static uint32 mdp4_scale_phase_step(int f_num, uint32 src, uint32 dst)
 	return val;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void mdp4_scale_setup(struct mdp4_overlay_pipe *pipe)
 {
 	int ptype;

@@ -358,7 +358,6 @@ nfulnl_timer(unsigned long data)
 
 /* This is an inline function, we don't really care about a long
  * list of arguments */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static inline int
 __build_packet_message(struct nfulnl_instance *inst,
 			const struct sk_buff *skb,

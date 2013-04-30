@@ -478,7 +478,6 @@ static unsigned int tile_size(unsigned int src_width,
 	return ((row_num_w * row_num_h * tile_w * tile_h) + 8191) & ~8191;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int msm_rotator_ycxcx_h2v2_tile(struct msm_rotator_img_info *info,
 				  unsigned int in_paddr,
 				  unsigned int out_paddr,

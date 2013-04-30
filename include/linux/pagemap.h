@@ -410,7 +410,6 @@ static inline int fault_in_pages_writeable(char __user *uaddr, int size)
 	return ret;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static inline int fault_in_pages_readable(const char __user *uaddr, int size)
 {
 	volatile char c;

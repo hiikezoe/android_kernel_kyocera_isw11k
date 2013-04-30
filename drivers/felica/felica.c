@@ -583,7 +583,6 @@ static int pon_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 	return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int pon_open(struct inode *inode, struct file *file)
 {
 	int				nRet = -1;

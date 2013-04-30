@@ -3005,7 +3005,6 @@ static void rb_advance_reader(struct ring_buffer_per_cpu *cpu_buffer)
 	cpu_buffer->reader_page->read += length;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void rb_advance_iter(struct ring_buffer_iter *iter)
 {
 	struct ring_buffer *buffer;

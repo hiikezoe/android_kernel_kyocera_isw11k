@@ -882,7 +882,6 @@ const struct attribute_group *usb_interface_groups[] = {
 	NULL
 };
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int usb_create_sysfs_intf_files(struct usb_interface *intf)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);

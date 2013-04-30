@@ -413,7 +413,6 @@ int msm_rpcrouter_create_server_pdev(struct rr_server *server)
 	return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int msm_rpcrouter_init_devices(void)
 {
 	int rc;

@@ -301,7 +301,6 @@ static void mddi_host_disable_hclk(void)
 #endif
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void mddi_vote_to_sleep(mddi_host_type host_idx, boolean sleep)
 {
 	uint16 vote_mask;

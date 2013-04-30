@@ -26,7 +26,6 @@ sctp_unique_tuple(struct nf_conntrack_tuple *tuple,
 					 &nf_sctp_port_rover);
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static bool
 sctp_manip_pkt(struct sk_buff *skb,
 	       unsigned int iphdroff,

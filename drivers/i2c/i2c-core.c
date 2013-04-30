@@ -728,7 +728,6 @@ static int __process_new_adapter(struct device_driver *d, void *data)
 	return i2c_do_add_adapter(to_i2c_driver(d), data);
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int i2c_register_adapter(struct i2c_adapter *adap)
 {
 	int res = 0, dummy;

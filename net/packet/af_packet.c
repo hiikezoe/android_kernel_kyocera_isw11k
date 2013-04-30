@@ -925,7 +925,6 @@ static int tpacket_fill_skb(struct packet_sock *po, struct sk_buff *skb,
 	return tp_len;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 {
 	struct socket *sock;

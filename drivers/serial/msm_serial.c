@@ -148,7 +148,6 @@ static void msm_enable_ms(struct uart_port *port)
 
 #ifdef CONFIG_SERIAL_MSM_CLOCK_CONTROL
 /* turn clock off if TX buffer is empty, otherwise reschedule */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static enum hrtimer_restart msm_serial_clock_off(struct hrtimer *timer) {
 	struct msm_port *msm_port = container_of(timer, struct msm_port,
 						 clk_off_timer);

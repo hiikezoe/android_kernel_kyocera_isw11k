@@ -2142,7 +2142,6 @@ static int msm_register_pmem(struct msm_sync *sync, void __user *arg)
 	return __msm_register_pmem(sync, &info);
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int msm_stats_axi_cfg(struct msm_sync *sync,
 		struct msm_vfe_cfg_cmd *cfgcmd)
 {

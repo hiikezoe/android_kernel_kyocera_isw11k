@@ -318,7 +318,6 @@ static int nandmtd1_TestPrerequists(struct mtd_info *mtd)
  *
  * Always returns YAFFS_OK.
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int nandmtd1_QueryNANDBlock(struct yaffs_DeviceStruct *dev, int blockNo,
 	yaffs_BlockState *pState, __u32 *pSequenceNumber)
 {

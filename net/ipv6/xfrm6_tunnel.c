@@ -236,7 +236,6 @@ static int xfrm6_tunnel_input(struct xfrm_state *x, struct sk_buff *skb)
 	return skb_network_header(skb)[IP6CB(skb)->nhoff];
 }
 
-#pragma GCC diagnostic ignored "-Wparentheses"
 static int xfrm6_tunnel_rcv(struct sk_buff *skb)
 {
 	struct net *net = dev_net(skb->dev);

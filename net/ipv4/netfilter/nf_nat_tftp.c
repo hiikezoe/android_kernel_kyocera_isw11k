@@ -40,7 +40,6 @@ static void __exit nf_nat_tftp_fini(void)
 	synchronize_rcu();
 }
 
-#pragma GCC diagnostic ignored "-Waddress"
 static int __init nf_nat_tftp_init(void)
 {
 	BUG_ON(nf_nat_tftp_hook != NULL);

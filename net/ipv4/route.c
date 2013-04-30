@@ -1525,7 +1525,6 @@ static struct dst_entry *ipv4_negative_advice(struct dst_entry *dst)
  * and "frag. need" (breaks PMTU discovery) in icmp.c.
  */
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void ip_rt_send_redirect(struct sk_buff *skb)
 {
 	struct rtable *rt = skb_rtable(skb);

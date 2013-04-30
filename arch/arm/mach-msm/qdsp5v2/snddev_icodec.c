@@ -454,7 +454,6 @@ static int snddev_icodec_close_tx(struct snddev_icodec_state *icodec)
 	return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int snddev_icodec_set_device_volume_impl(
 		struct msm_snddev_info *dev_info, u32 volume)
 {

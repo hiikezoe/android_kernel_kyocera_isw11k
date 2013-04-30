@@ -589,7 +589,6 @@ static int snd_ctl_card_info(struct snd_card *card, struct snd_ctl_file * ctl,
 	return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int snd_ctl_elem_list(struct snd_card *card,
 			     struct snd_ctl_elem_list __user *_list)
 {

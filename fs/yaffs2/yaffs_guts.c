@@ -893,7 +893,6 @@ int yaffs_CheckFF(__u8 *buffer, int nBytes)
 	return 1;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static int yaffs_CheckChunkErased(struct yaffs_DeviceStruct *dev,
 				int chunkInNAND)
 {
@@ -1569,7 +1568,6 @@ static int yaffs_FindChunkInGroup(yaffs_Device *dev, int theChunk,
  * Returns 0 if it stopped early due to hitting the limit and the delete is incomplete.
  */
 
-#pragma GCC diagnostic ignored "-Wunused-function"
 static int yaffs_DeleteWorker(yaffs_Object *in, yaffs_Tnode *tn, __u32 level,
 			      int chunkOffset, int *limit)
 {

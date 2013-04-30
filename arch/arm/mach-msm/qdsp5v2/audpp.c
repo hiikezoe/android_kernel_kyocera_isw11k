@@ -390,7 +390,6 @@ out:
 }
 EXPORT_SYMBOL(audpp_enable);
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void audpp_disable(int id, void *private)
 {
 	struct audpp_state *audpp = &the_audpp_state;

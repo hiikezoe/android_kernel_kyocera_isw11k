@@ -236,7 +236,6 @@ static int bma150_smbus_read_byte_block(struct i2c_client *client,
 	return 0;
 }
 
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 static int bma150_set_mode(struct i2c_client *client, unsigned char Mode)
 {
 	int comres = 0;

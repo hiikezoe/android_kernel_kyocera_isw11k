@@ -447,7 +447,6 @@ static void vfe31_proc_ops(enum VFE31_MESSAGE_ID id, void *msg, size_t len)
 		GFP_ATOMIC);
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static void vfe_send_outmsg(uint8_t msgid, uint32_t pyaddr,
 	uint32_t pcbcraddr)
 {

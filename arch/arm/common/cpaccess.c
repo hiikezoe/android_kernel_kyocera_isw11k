@@ -151,7 +151,6 @@ static unsigned long do_cpregister_rw(int write)
  * @cnt:	not used
  *
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static ssize_t cp_register_write_sysfs(struct sys_device *dev,
  struct sysdev_attribute *attr, const char *buf, size_t cnt)
 {

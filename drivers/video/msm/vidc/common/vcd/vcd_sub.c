@@ -2173,7 +2173,6 @@ u32 vcd_handle_first_fill_output_buffer_for_enc(
 	return rc;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 u32 vcd_handle_first_fill_output_buffer_for_dec(
 	struct vcd_clnt_ctxt *cctxt,
 	struct vcd_frame_data *frm_entry,

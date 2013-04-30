@@ -1577,7 +1577,6 @@ static const char *kmsg_to_str(enum kmsg_dump_reason reason)
  * Iterate through each of the dump devices and call the oops/panic
  * callbacks with the log buffer.
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 void kmsg_dump(enum kmsg_dump_reason reason)
 {
 	unsigned long end;

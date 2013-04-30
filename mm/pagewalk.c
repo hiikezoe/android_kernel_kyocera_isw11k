@@ -133,7 +133,6 @@ static int walk_hugetlb_range(struct vm_area_struct *vma,
  * If any callback returns a non-zero value, the walk is aborted and
  * the return value is propagated back to the caller. Otherwise 0 is returned.
  */
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 int walk_page_range(unsigned long addr, unsigned long end,
 		    struct mm_walk *walk)
 {

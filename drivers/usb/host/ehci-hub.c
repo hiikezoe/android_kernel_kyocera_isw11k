@@ -106,7 +106,6 @@ static void ehci_handover_companion_ports(struct ehci_hcd *ehci)
 	ehci->owned_ports = 0;
 }
 
-#pragma GCC diagnostic ignored "-Wunused-function"
 static void ehci_adjust_port_wakeup_flags(struct ehci_hcd *ehci,
 		bool suspending)
 {
@@ -529,7 +528,6 @@ static ssize_t store_companion(struct device *dev,
 }
 static DEVICE_ATTR(companion, 0644, show_companion, store_companion);
 
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 static inline void create_companion_file(struct ehci_hcd *ehci)
 {
 	int	i;
