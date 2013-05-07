@@ -10,6 +10,10 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -203,6 +207,11 @@ static boolean mddi_host_hclk_on = FALSE;
 int int_mddi_pri_flag = FALSE;
 int int_mddi_ext_flag = FALSE;
 
+extern uint8_t g_disp_board_check_flag;
+
+extern struct mddi_local_disp_state_type mddi_local_state;
+static bool local_crc_error_flag;
+
 static void mddi_report_errors(uint32 int_reg)
 {
 	mddi_host_type host_idx = mddi_curr_host;
@@ -256,7 +265,12 @@ static void mddi_report_errors(uint32 int_reg)
 static void mddi_host_enable_io_clock(void)
 {
 	if (!MDDI_HOST_IS_IO_CLOCK_ON)
+	{
+
+        MDDI_MSG_DEBUG("%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
 		MDDI_HOST_ENABLE_IO_CLOCK;
+}
 }
 
 static void mddi_host_enable_hclk(void)
@@ -954,6 +968,14 @@ static void mddi_process_rev_packets(void)
 					     client_status_pkt_ptr->
 					     crc_error_count);
 				}
+
+                if(client_status_pkt_ptr->crc_error_count != 0)
+                {
+                    local_crc_error_flag = TRUE;
+
+                    mddi_local_state.crc_error_count += client_status_pkt_ptr->crc_error_count;
+                }
+
 				pmhctl->log_parms.fwd_crc_cnt +=
 				    client_status_pkt_ptr->crc_error_count;
 				pmhctl->stats.fwd_crc_count +=
@@ -1129,6 +1151,14 @@ static void mddi_process_rev_packets(void)
 			complete(&(mddi_rev_user.done_comp));
 		}
 		pmhctl->rev_state = MDDI_REV_IDLE;
+
+    } else if (pmhctl->rev_state == MDDI_REV_STATUS_REQ_ISSUED){
+        if (mddi_rev_user.waiting){
+            complete(&(mddi_rev_user.done_comp));
+            mddi_rev_user.waiting = FALSE;
+        }
+        pmhctl->rev_state = MDDI_REV_IDLE;
+
 	} else {
 		pmhctl->rev_state = MDDI_REV_IDLE;
 	}
@@ -1447,6 +1477,8 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 	if (pmhctl->driver_state == MDDI_DRIVER_ENABLED)
 		return;
 
+    MDDI_MSG_DEBUG("%s %d %s start \n",__FILE__ , __LINE__ , __func__);
+
 	/* turn on HCLK to MDDI host core */
 	mddi_host_enable_hclk();
 
@@ -1496,6 +1528,9 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 	if (pad_reg_val == 0) {
 		/* If we are turning on band gap, need to wait 5us before turning
 		 * on the rest of the PAD */
+
+        MDDI_MSG_DEBUG("%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
 		mddi_host_reg_out(PAD_CTL, 0x08000);
 		udelay(5);
 	}
@@ -1526,7 +1561,8 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 		mddi_host_reg_out(TEST, 0x2);
 
 	/* Need an even number for counts */
-	mddi_host_reg_out(DRIVER_START_CNT, 0x60006);
+/*	mddi_host_reg_out(DRIVER_START_CNT, 0x60006); */
+	mddi_host_reg_out(DRIVER_START_CNT, 0x700000);
 
 #ifndef T_MSM7500
 	/* Setup defaults for MDP related register */
@@ -1548,12 +1584,16 @@ static void mddi_host_initialize_registers(mddi_host_type host_idx)
 	mddi_host_reg_out(CMD, MDDI_CMD_DISP_IGNORE);
 #endif
 
+    MDDI_MSG_DEBUG("%s %d %s end \n",__FILE__ , __LINE__ , __func__);
+
 }
 
 void mddi_host_configure_interrupts(mddi_host_type host_idx, boolean enable)
 {
 	unsigned long flags;
 	mddi_host_cntl_type *pmhctl = &(mhctl[host_idx]);
+
+    MDDI_MSG_DEBUG(KERN_INFO "%s %d %s start \n",__FILE__ , __LINE__ , __func__);
 
 	spin_lock_irqsave(&mddi_host_spin_lock, flags);
 
@@ -1576,6 +1616,9 @@ void mddi_host_configure_interrupts(mddi_host_type host_idx, boolean enable)
 			else {
 				int_mddi_pri_flag = TRUE;
 				irq_enabled = 1;
+
+                MDDI_MSG_DEBUG("%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
 			}
 		} else {
 			if (request_irq
@@ -1585,6 +1628,9 @@ void mddi_host_configure_interrupts(mddi_host_type host_idx, boolean enable)
 				       "b mddi: unable to request_irq\n");
 			else
 				int_mddi_ext_flag = TRUE;
+
+                MDDI_MSG_DEBUG("%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
 		}
 
 		/* Set MDDI Interrupt enable reg -- Enable Reverse data avail */
@@ -1605,8 +1651,15 @@ void mddi_host_configure_interrupts(mddi_host_type host_idx, boolean enable)
 #endif
 	} else {
 		if (pmhctl->driver_state == MDDI_DRIVER_ENABLED)
+		{
 			pmhctl->driver_state = MDDI_DRIVER_DISABLED;
+
+            MDDI_MSG_DEBUG("%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
+        }
 	}
+
+    MDDI_MSG_DEBUG("%s %d %s \n end",__FILE__ , __LINE__ , __func__);
 
 }
 
@@ -1631,6 +1684,8 @@ static void mddi_host_powerup(mddi_host_type host_idx)
 {
 	mddi_host_cntl_type *pmhctl = &(mhctl[host_idx]);
 
+    MDDI_MSG_DEBUG("mddi_host_init() start-----\n");
+
 	if (pmhctl->link_state != MDDI_LINK_DISABLED)
 		return;
 
@@ -1643,7 +1698,8 @@ static void mddi_host_powerup(mddi_host_type host_idx)
 	pmhctl->link_state = MDDI_LINK_ACTIVATING;
 
 	/* Link activate command */
-	mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);
+
+/*	mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE); */
 
 #ifdef CLKRGM_MDDI_IO_CLOCK_IN_MHZ
 	MDDI_MSG_NOTICE("MDDI Host: Activating Link %d Mbps\n",
@@ -1654,7 +1710,15 @@ static void mddi_host_powerup(mddi_host_type host_idx)
 
 	/* Initialize the timer */
 	if (host_idx == MDDI_HOST_PRIM)
+	{
+
+        MDDI_MSG_DEBUG("%s %d %s \n",__FILE__ , __LINE__ , __func__);
+
 		mddi_host_timer_service(0);
+}
+
+    MDDI_MSG_DEBUG("%s %d %s end \n",__FILE__ , __LINE__ , __func__);
+
 }
 
 void mddi_send_fw_link_skew_cal(mddi_host_type host_idx)
@@ -1669,6 +1733,8 @@ void mddi_host_init(mddi_host_type host_idx)
 {
 	static boolean initialized = FALSE;
 	mddi_host_cntl_type *pmhctl;
+
+    MDDI_MSG_DEBUG("mddi_host_init() start-----\n");
 
 	if (host_idx >= MDDI_NUM_HOST_CORES) {
 		MDDI_MSG_ERR("Invalid host core index\n");
@@ -1801,78 +1867,84 @@ void mddi_host_init(mddi_host_type host_idx)
 
 	mddi_host_powerup(host_idx);
 	pmhctl = &(mhctl[host_idx]);
+
+    MDDI_MSG_DEBUG("%s %d %s end \n",__FILE__ , __LINE__ , __func__);
+
 }
 
 #ifdef CONFIG_FB_MSM_MDDI_AUTO_DETECT
-static uint32 mddi_client_id;
+/* static uint32 mddi_client_id; */
 
-uint32 mddi_get_client_id(void)
-{
+/* uint32 mddi_get_client_id(void) */
+/* { */
 
-#ifndef FEATURE_MDDI_DISABLE_REVERSE
-	mddi_host_type host_idx = MDDI_HOST_PRIM;
-	static boolean client_detection_try = FALSE;
-	mddi_host_cntl_type *pmhctl;
-	unsigned long flags;
-	uint16 saved_rev_pkt_size;
-	int ret;
+/* #ifndef FEATURE_MDDI_DISABLE_REVERSE */
+/* 	mddi_host_type host_idx = MDDI_HOST_PRIM; */
+/* 	static boolean client_detection_try = FALSE; */
+/* 	mddi_host_cntl_type *pmhctl; */
+/* 	unsigned long flags; */
+/* 	uint16 saved_rev_pkt_size; */
+/* 	int ret; */
 
-	if (!client_detection_try) {
+/* 	if (!client_detection_try) { */
 		/* Toshiba display requires larger drive_lo value */
-		mddi_host_reg_out(DRIVE_LO, 0x0050);
+/* 		mddi_host_reg_out(DRIVE_LO, 0x0050); */
 
-		pmhctl = &(mhctl[MDDI_HOST_PRIM]);
+/* 		pmhctl = &(mhctl[MDDI_HOST_PRIM]); */
 
-		saved_rev_pkt_size = pmhctl->rev_pkt_size;
+/* 		saved_rev_pkt_size = pmhctl->rev_pkt_size; */
 
 		/* Increase Rev Encap Size */
-		pmhctl->rev_pkt_size = MDDI_CLIENT_CAPABILITY_REV_PKT_SIZE;
-		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size);
+/* 		pmhctl->rev_pkt_size = MDDI_CLIENT_CAPABILITY_REV_PKT_SIZE; */
+/* 		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size); */
 
 		/* disable hibernation temporarily */
-		if (!pmhctl->disable_hibernation)
-			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE);
+/* 		if (!pmhctl->disable_hibernation) */
+/* 			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE); */
 
-		mddi_rev_user.waiting = TRUE;
-		INIT_COMPLETION(mddi_rev_user.done_comp);
+/* 		mddi_rev_user.waiting = TRUE; */
+/* 		INIT_COMPLETION(mddi_rev_user.done_comp); */
 
-		spin_lock_irqsave(&mddi_host_spin_lock, flags);
+/* 		spin_lock_irqsave(&mddi_host_spin_lock, flags); */
 
 		/* turn on clock(s), if they have been disabled */
-		mddi_host_enable_hclk();
-		mddi_host_enable_io_clock();
+/* 		mddi_host_enable_hclk(); */
+/* 		mddi_host_enable_io_clock(); */
 
-		mddi_client_capability_request = TRUE;
+/* 		mddi_client_capability_request = TRUE; */
 
-		if (pmhctl->rev_state == MDDI_REV_IDLE) {
+/* 		if (pmhctl->rev_state == MDDI_REV_IDLE) { */
 			/* attempt to send the reverse encapsulation now */
-			mddi_issue_reverse_encapsulation();
-		}
-		spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
+/* 			mddi_issue_reverse_encapsulation(); */
+/* 		} */
+/* 		spin_unlock_irqrestore(&mddi_host_spin_lock, flags); */
 
-		wait_for_completion_killable(&(mddi_rev_user.done_comp));
+/* 		wait_for_completion_killable(&(mddi_rev_user.done_comp)); */
 
 		/* Set Rev Encap Size back to its original value */
-		pmhctl->rev_pkt_size = saved_rev_pkt_size;
-		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size);
+/* 		pmhctl->rev_pkt_size = saved_rev_pkt_size; */
+/* 		mddi_host_reg_out(REV_ENCAP_SZ, pmhctl->rev_pkt_size); */
 
 		/* reenable auto-hibernate */
-		if (!pmhctl->disable_hibernation)
-			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
+/* 		if (!pmhctl->disable_hibernation) */
+/* 			mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1); */
 
-		mddi_host_reg_out(DRIVE_LO, 0x0032);
-		client_detection_try = TRUE;
+/* 		mddi_host_reg_out(DRIVE_LO, 0x0032); */
+/* 		client_detection_try = TRUE; */
 
-		mddi_client_id = (mddi_client_capability_pkt.Mfr_Name<<16) |
-				mddi_client_capability_pkt.Product_Code;
+/* 		mddi_client_id = (mddi_client_capability_pkt.Mfr_Name<<16) | */
+/* 				mddi_client_capability_pkt.Product_Code; */
 
-		if (!mddi_client_id)
-			mddi_disable(1);
+/*         if( 0x00 != g_disp_board_check_flag ) */
+/*         { */
+/* 			if (!mddi_client_id) */
+/* 				mddi_disable(1); */
+/*         } */
 
-		ret = mddi_client_power(mddi_client_id);
-		if (ret < 0)
-			MDDI_MSG_ERR("mddi_client_power return %d", ret);
-	}
+/* 		ret = mddi_client_power(mddi_client_id); */
+/* 		if (ret < 0) */
+/* 			MDDI_MSG_ERR("mddi_client_power return %d", ret);  */
+/* 	} */
 
 #if 0
 	switch (mddi_client_capability_pkt.Mfr_Name) {
@@ -1910,10 +1982,11 @@ uint32 mddi_get_client_id(void)
 	}
 #endif
 
-#endif
+/* #endif */
 
-	return mddi_client_id;
-}
+/* 	return mddi_client_id; */
+/* } */
+
 #endif
 
 void mddi_host_powerdown(mddi_host_type host_idx)
@@ -2302,3 +2375,92 @@ void mddi_mhctl_remove(mddi_host_type host_idx)
 			  (void *)pmhctl->rev_data_buf,
 			  pmhctl->rev_data_dma_addr);
 }
+
+uint32 mddi_local_crc_error_check(void)
+{
+    uint32              result   = MDDI_LOCAL_CRC_OK;
+    uint8               req_flg  = FALSE;
+    mddi_host_type      host_idx = mddi_curr_host;
+    mddi_host_cntl_type *pmhctl  = &(mhctl[host_idx]);
+    unsigned long       flags;
+    int                 wait_ret;
+
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_local_crc_error_check S\n");
+
+    if(MDDI_REV_IDLE == pmhctl->rev_state)
+    {
+        spin_lock_irqsave(&mddi_host_spin_lock, flags);
+
+        mddi_host_enable_hclk();
+        mddi_host_enable_io_clock();
+
+        mddi_rev_user.waiting = TRUE;
+        INIT_COMPLETION(mddi_rev_user.done_comp);
+
+        pmhctl->rev_state = MDDI_REV_STATUS_REQ_ISSUED;
+
+        mddi_host_reg_out(CMD,MDDI_CMD_SEND_RTD);
+
+        if (!pmhctl->rev_ptr_written)
+        {
+            pmhctl->rev_ptr_written = TRUE;
+            mddi_host_reg_out(REV_PTR, pmhctl->mddi_rev_ptr_write_val);
+        }
+
+        mddi_host_reg_out(CMD, MDDI_CMD_GET_CLIENT_STATUS);
+
+        spin_unlock_irqrestore(&mddi_host_spin_lock, flags);
+
+        req_flg = TRUE;
+    }
+
+    if(TRUE == req_flg)
+    {
+        wait_ret = wait_for_completion_timeout(&(mddi_rev_user.done_comp), 1 * HZ);
+
+        if (wait_ret <= 0)
+        {
+            local_crc_error_flag = TRUE;
+
+            mddi_rev_user.waiting = FALSE;
+
+        }
+
+        if(TRUE == local_crc_error_flag)
+        {
+            result = MDDI_LOCAL_CRC_ERROR;
+
+            local_crc_error_flag = FALSE;
+        }
+    }
+    else
+    {
+        result = MDDI_LOCAL_CRC_NO_CHK;
+    }
+    mddi_local_state.crc_error_state = result;
+
+    DISP_LOCAL_LOG_EMERG("DISP mddi_local_crc_error_check E\n");
+
+    return result;
+
+}
+
+void mddi_set_hibernation_to_active(void)
+{
+	mddi_host_type host_idx = mddi_curr_host;
+	mddi_host_cntl_type *pmhctl = &(mhctl[host_idx]);
+
+    mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE);
+
+    pmhctl->link_state = MDDI_LINK_ACTIVATING;
+    mddi_host_reg_out(CMD, MDDI_CMD_LINK_ACTIVE);
+}
+
+void mddi_set_auto_hibernation(void)
+{
+	mddi_host_type host_idx = mddi_curr_host;
+
+    mddi_host_reg_out(CMD, MDDI_CMD_HIBERNATE | 1);
+}
+

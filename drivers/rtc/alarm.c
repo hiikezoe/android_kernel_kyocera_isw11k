@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* drivers/rtc/alarm.c
  *
  * Copyright (C) 2007-2009 Google, Inc.
@@ -31,9 +35,13 @@
 #define ANDROID_ALARM_PRINT_SUSPEND (1U << 4)
 #define ANDROID_ALARM_PRINT_INT (1U << 5)
 #define ANDROID_ALARM_PRINT_FLOW (1U << 6)
-
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+static int debug_mask = ANDROID_ALARM_PRINT_ERROR | \
+			ANDROID_ALARM_PRINT_INIT_STATUS | ANDROID_ALARM_PRINT_SUSPEND;
+#else
 static int debug_mask = ANDROID_ALARM_PRINT_ERROR | \
 			ANDROID_ALARM_PRINT_INIT_STATUS;
+#endif
 module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 #define pr_alarm(debug_level_mask, args...) \
@@ -412,8 +420,13 @@ static int alarm_suspend(struct platform_device *pdev, pm_message_t state)
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
 	hrtimer_cancel(&alarms[ANDROID_ALARM_RTC_WAKEUP].timer);
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+	hrtimer_cancel(&alarms[
+			ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP].timer);
+#else
 	hrtimer_cancel(&alarms[
 			ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP_MASK].timer);
+#endif
 
 	tmp_queue = &alarms[ANDROID_ALARM_RTC_WAKEUP];
 	if (tmp_queue->first)

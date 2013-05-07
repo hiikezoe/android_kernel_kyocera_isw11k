@@ -232,6 +232,10 @@ obj-$(CONFIG_MACH_SAPPHIRE) += board-sapphire-rfkill.o msm_vibrator.o
 
 obj-$(CONFIG_ARCH_FSM9XXX) += board-fsm9xxx.o
 
+obj-$(CONFIG_FEATURE_KCC_F45) += kc_changer_ic.o
+obj-$(CONFIG_FEATURE_KCC_F45) += msm_vibrator.o
+obj-$(CONFIG_FEATURE_KCC_F45) += changer_dm_driver.o
+
 obj-$(CONFIG_TROUT_BATTCHG) += htc_battery.o
 
 obj-$(CONFIG_HTC_PWRSINK) += htc_pwrsink.o

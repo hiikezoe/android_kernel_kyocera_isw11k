@@ -1,3 +1,6 @@
+/* This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* Copyright (c) 2010-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -111,10 +114,12 @@ static struct clk *camio_csi_vfe_clk;
 static struct clk *camio_jpeg_clk;
 static struct clk *camio_jpeg_pclk;
 static struct clk *camio_vpe_clk;
+#if !defined(CONFIG_MLM1183) && !defined(CONFIG_RJ6CBA100)
 static struct vreg *vreg_gp2;
 static struct vreg *vreg_lvsw1;
 static struct vreg *vreg_gp6;
 static struct vreg *vreg_gp16;
+#endif /* !defined(CONFIG_MLM1183) && !defined(CONFIG_RJ6CBA100) */
 static struct regulator *fs_vfe;
 static struct regulator *fs_vpe;
 static struct msm_camera_io_ext camio_ext;
@@ -201,6 +206,7 @@ void msm_io_memcpy(void __iomem *dest_addr, void __iomem *src_addr, u32 len)
 
 static void msm_camera_vreg_enable(struct platform_device *pdev)
 {
+#if !defined(CONFIG_MLM1183) && !defined(CONFIG_RJ6CBA100)
 	vreg_gp2 = vreg_get(NULL, "gp2");
 	if (IS_ERR(vreg_gp2)) {
 		pr_err("%s: VREG GP2 get failed %ld\n", __func__,
@@ -302,10 +308,12 @@ gp2_disable:
 gp2_put:
 	vreg_put(vreg_gp2);
 	vreg_gp2 = NULL;
+#endif /* !defined(CONFIG_MLM1183) && !defined(CONFIG_RJ6CBA100) */
 }
 
 static void msm_camera_vreg_disable(void)
 {
+#if !defined(CONFIG_MLM1183) && !defined(CONFIG_RJ6CBA100)
 	if (vreg_gp2) {
 		vreg_disable(vreg_gp2);
 		vreg_put(vreg_gp2);
@@ -330,6 +338,7 @@ static void msm_camera_vreg_disable(void)
 		regulator_disable(fs_vfe);
 		regulator_put(fs_vfe);
 	}
+#endif /* !defined(CONFIG_MLM1183) && !defined(CONFIG_RJ6CBA100) */
 }
 
 int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
@@ -406,6 +415,13 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	default:
 		break;
 	}
+
+#if defined(CONFIG_MLM1183) || defined(CONFIG_RJ6CBA100)
+	if (clktype == CAMIO_CAM_MCLK_CLK) {
+		/* Don't output MCLK */
+		return rc;
+	}
+#endif /* defined(CONFIG_MLM1183) && defined(CONFIG_RJ6CBA100) */
 
 	if (!IS_ERR(clk))
 		clk_enable(clk);

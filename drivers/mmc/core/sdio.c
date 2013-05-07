@@ -26,6 +26,8 @@
 #include "sdio_ops.h"
 #include "sdio_cis.h"
 
+#define VENDOR_ID  0x392
+
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 #include <linux/mmc/sdio_ids.h>
 #endif
@@ -513,16 +515,20 @@ static int mmc_sdio_init_card(struct mmc_host *host, u32 ocr,
 	/*
 	 * Switch to high-speed (if supported).
 	 */
-	err = sdio_enable_hs(card);
-	if (err > 0)
-		mmc_sd_go_highspeed(card);
-	else if (err)
-		goto remove;
+	if (card->cis.vendor != VENDOR_ID)  /* To by pass the check for Beceem Vendor Products */ {
+		err = sdio_enable_hs(card);
+		if (err > 0)
+			mmc_sd_go_highspeed(card);
+		else if (err)
+			goto remove;
 
-	/*
-	 * Change to the card's maximum speed.
-	 */
-	mmc_set_clock(host, mmc_sdio_get_max_clock(card));
+		/*
+		 * Change to the card's maximum speed.
+		 */
+		mmc_set_clock(host, mmc_sdio_get_max_clock(card));
+	} else {
+		mmc_set_clock(host, 25000000);
+	}
 
 	/*
 	 * Switch to wider bus (if supported).
@@ -660,6 +666,8 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 	return err;
 }
 
+#define WIMAX_RESU_NOINIT
+
 static int mmc_sdio_resume(struct mmc_host *host)
 {
 	int i, err = 0;
@@ -670,6 +678,19 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	/* Basic card reinitialization. */
 	mmc_claim_host(host);
 
+#ifdef WIMAX_RESU_NOINIT
+	if (host->card->cis.vendor != VENDOR_ID) {
+		err = mmc_sdio_init_card(host, host->ocr, host->card,
+					 (host->pm_flags & MMC_PM_KEEP_POWER));
+	}
+	else {
+		printk(KERN_ERR "%s: mmc_sdio_resume no init\n", mmc_hostname(host));
+		err = 0;
+	}
+	if (!err)
+		/* We may have switched to 1-bit mode during suspend. */
+		err = sdio_enable_wide(host->card);
+#else
 	/* No need to reinitialize powered-resumed nonremovable cards */
 	if (mmc_card_is_removable(host) || !mmc_card_is_powered_resumed(host))
 		err = mmc_sdio_init_card(host, host->ocr, host->card,
@@ -685,7 +706,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 			err = 0;
 		}
 	}
-
+#endif
 	if (!err && host->sdio_irqs)
 		mmc_signal_sdio_irq(host);
 	mmc_release_host(host);
@@ -935,16 +956,20 @@ int sdio_reset_comm(struct mmc_card *card)
 	/*
 	 * Switch to high-speed (if supported).
 	 */
-	err = sdio_enable_hs(card);
-	if (err > 0)
-		mmc_sd_go_highspeed(card);
-	else if (err)
-		goto err;
+	if (card->cis.vendor != VENDOR_ID)  /* To by pass the check for Beceem Vendor Products */ {
+		err = sdio_enable_hs(card);
+		if (err > 0)
+			mmc_sd_go_highspeed(card);
+		else if (err)
+			goto err;
 
-	/*
-	 * Change to the card's maximum speed.
-	 */
-	mmc_set_clock(host, mmc_sdio_get_max_clock(card));
+		/*
+		 * Change to the card's maximum speed.
+		 */
+		mmc_set_clock(host, mmc_sdio_get_max_clock(card));
+	} else {
+		mmc_set_clock(host, 25000000);
+	}
 
 	err = sdio_enable_4bit_bus(card);
 	if (err > 0) {

@@ -10,6 +10,10 @@
  * GNU General Public License for more details.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -32,12 +36,18 @@
 
 #include "msm_fb_panel.h"
 
+#include "msm_fb.h"
+
+extern uint8_t g_disp_board_check_flag;
+
 int panel_next_on(struct platform_device *pdev)
 {
 	int ret = 0;
 	struct msm_fb_panel_data *pdata;
 	struct msm_fb_panel_data *next_pdata;
 	struct platform_device *next_pdev;
+
+    MSM_FB_DEBUG("panel_next_on():start-----\n");
 
 	pdata = (struct msm_fb_panel_data *)pdev->dev.platform_data;
 
@@ -48,9 +58,13 @@ int panel_next_on(struct platform_device *pdev)
 			    (struct msm_fb_panel_data *)next_pdev->dev.
 			    platform_data;
 			if ((next_pdata) && (next_pdata->on))
+			{
+                MSM_FB_DEBUG("panel_next_on():next_pdata->on-----\n");
 				ret = next_pdata->on(next_pdev);
 		}
 	}
+	}
+    MSM_FB_DEBUG("panel_next_on():end-----\n");
 
 	return ret;
 }
@@ -83,6 +97,7 @@ struct platform_device *msm_fb_device_alloc(struct msm_fb_panel_data *pdata,
 {
 	struct platform_device *this_dev = NULL;
 	char dev_name[16];
+    int pdest = (int)pdata->panel_info.pdest;
 
 	switch (type) {
 	case EBI2_PANEL:
@@ -124,8 +139,14 @@ struct platform_device *msm_fb_device_alloc(struct msm_fb_panel_data *pdata,
 	else
 		return NULL;
 
-	this_dev =
-	    platform_device_alloc(dev_name, ((u32) type << 16) | (u32) id);
+    if( 0x00 == g_disp_board_check_flag )
+    {
+        this_dev = platform_device_alloc(dev_name, (int)((pdest<<16)|type));
+    }
+    else
+    {
+        this_dev = platform_device_alloc(dev_name, ((u32) type << 16) | (u32) id);
+    }
 
 	if (this_dev) {
 		if (platform_device_add_data

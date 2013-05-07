@@ -7,6 +7,9 @@
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
  * the Free Software Foundation.
+ *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
  */
 
 #ifdef __KERNEL__
@@ -35,6 +38,19 @@ struct input_event {
  */
 
 #define EV_VERSION		0x010001
+
+#define TS_DIAG_START       _IO('E', 0xA1)
+#define TS_MULTI_GET        _IOR('E', 0xA2, struct ts_diag_type)
+#define TS_COODINATE_GET    _IOR('E', 0xA3, struct ts_diag_type)
+#define TS_DIAG_END         _IO('E', 0xA4)
+#define TS_DIAG_LOG_LEVEL   _IOW('E', 0xA5, unsigned char)
+#define TS_DIAG_EVENT_CTRL  _IOW('E', 0xA6, unsigned char)
+
+#define EVIOCNVDTS          _IOW('E', 0xB1, struct ts_nv_data_table)
+#define EVIOCBOCHK          _IOR('E', 0xB2, unsigned char)
+
+#define TS_LOG_GET          _IOR('E', 0xB3, unsigned int)
+#define TS_SET_POWER_CHG    _IOW('E', 0xB4, unsigned int)
 
 /*
  * IOCTLs (0x00 - 0x7f)
@@ -1614,6 +1630,35 @@ int input_ff_erase(struct input_dev *dev, int effect_id, struct file *file);
 
 int input_ff_create_memless(struct input_dev *dev, void *data,
 		int (*play_effect)(struct input_dev *, void *, struct ff_effect *));
+
+
+struct ts_diag_event {
+    int x;
+    int y;
+    int width;
+};
+
+struct ts_diag_type {
+    struct ts_diag_event ts[10];
+    int diag_count;
+};
+
+struct ts_nv_data_table {
+    unsigned char result;
+    unsigned char sz_touch_panel_atmel_t7[3];
+    unsigned char sz_touch_panel_atmel_t8[10];
+    unsigned char sz_touch_panel_atmel_t9[35];
+    unsigned char sz_touch_panel_atmel_t15[11];
+    unsigned char sz_touch_panel_atmel_t19[16];
+    unsigned char sz_touch_panel_atmel_t20[12];
+    unsigned char sz_touch_panel_atmel_t22[17];
+    unsigned char sz_touch_panel_atmel_t28[6];
+    unsigned char sz_touch_panel_atmel_t40[5];
+    unsigned char sz_touch_panel_atmel_t42[8];
+    unsigned char sz_touch_panel_atmel_t46[9];
+    unsigned char sz_touch_panel_atmel_t47[10];
+    unsigned char sz_touch_panel_atmel_t48[54];
+};
 
 #endif
 #endif

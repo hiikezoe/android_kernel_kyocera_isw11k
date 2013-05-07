@@ -90,3 +90,10 @@ js-rtc-y = rtc.o
 
 obj-$(CONFIG_MSM_ROTATOR)	+= msm_rotator.o
 obj-$(CONFIG_MMC_GENERIC_CSDIO)	+= csdio.o
+
+obj-$(CONFIG_FEATURE_KCC_F45)	+= key_dm_driver.o
+
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_cdev_driver.o
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_k_api.o
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_fs.o
+obj-$(CONFIG_FEATURE_KCC_F45)	+= dnand_drv.o

@@ -1,4 +1,9 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
+#
 # MMC/SD host controller drivers
 #
 
@@ -454,7 +459,7 @@ config MMC_MSM_CARD_HW_DETECTION
 config MMC_MSM_SDC1_SUPPORT
 	boolean "Qualcomm SDC1 support"
 	depends on MMC_MSM
-	default y
+	default n
 	help
 	  Select Y to enable Slot 1.
 

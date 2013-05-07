@@ -348,6 +348,13 @@ struct platform_device msm_device_ssbi7 = {
 };
 #endif /* CONFIG_I2C_SSBI */
 
+#ifdef CONFIG_I2C_GPIO
+struct platform_device i2c_gpio_device = {
+	.name           = "i2c-gpio",
+	.id             = 8,
+};
+#endif
+
 #define MSM_HSUSB_PHYS        0xA3600000
 static struct resource resources_hsusb_otg[] = {
 	{

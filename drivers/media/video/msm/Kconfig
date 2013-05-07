@@ -10,6 +10,20 @@ config MSM_CAMERA_V4L2
           and /dev/control0.
 
 comment "Camera Sensor Selection"
+config MLM1183
+	bool "Sensor mlm1183 (YUV 8M)"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  8M YUV Sensor with AutoFocus
+
+config RJ6CBA100
+	bool "Sensor rj6cba100 (YUV 0.3M)"
+	depends on MSM_CAMERA
+	default y
+	---help---
+	  0.3M YUV Sensor
+
 config MT9T013
 	bool "Sensor mt9t013 (BAYER 3M)"
 	depends on MSM_CAMERA && !ARCH_MSM8X60 && !ARCH_MSM8960 && !MSM_CAMERA_V4L2

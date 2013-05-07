@@ -1,4 +1,9 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
+#
 # Misc strange devices
 #
 
@@ -548,6 +553,11 @@ config TSIF_DEBUG
 	default n
 	---help---
 	  This turns on debugging information for the tsif driver
+
+config DTVTUNER_PM
+	bool "dtvtuner_pm"
+	depends on ARCH_MSM
+	default m
 
 config HAPTIC_ISA1200
 	tristate "ISA1200 haptic support"

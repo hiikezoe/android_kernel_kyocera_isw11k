@@ -26,6 +26,10 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #ifndef MDP_H
 #define MDP_H
@@ -742,5 +746,7 @@ static inline void mdp4_overlay_dsi_state_set(int state)
 	/* empty */
 }
 #endif
+
+void mdp_refresh_screen_at_once(struct msm_fb_data_type *data);
 
 #endif /* MDP_H */

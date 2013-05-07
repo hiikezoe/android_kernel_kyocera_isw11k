@@ -1,6 +1,9 @@
 /*
  *  linux/drivers/mmc/core/core.c
  *
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ *
  *  Copyright (C) 2003-2004 Russell King, All Rights Reserved.
  *  SD support Copyright (C) 2004 Ian Molton, All Rights Reserved.
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
@@ -39,6 +42,8 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+
+static int mmc_wifi_power = 0;
 
 static struct workqueue_struct *workqueue;
 static struct wake_lock mmc_delayed_work_wake_lock;
@@ -304,7 +309,7 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	/*
 	 * SD cards use a 100 multiplier rather than 10
 	 */
-	mult = mmc_card_sd(card) ? 100 : 10;
+	mult = mmc_card_sd(card) ? 100 : mmc_card_sdio(card) ? 10 : 100;
 
 	/*
 	 * Scale up the multiplier (and therefore the timeout) by
@@ -1633,6 +1638,12 @@ static int mmc_rescan_try_freq(struct mmc_host *host, unsigned freq)
 	mmc_power_off(host);
 	return -EIO;
 }
+
+void mmc_set_wifi_power(int power)
+{
+	mmc_wifi_power = power;
+}
+EXPORT_SYMBOL(mmc_set_wifi_power);
 
 void mmc_rescan(struct work_struct *work)
 {

@@ -26,6 +26,10 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #ifndef __ARCH_ARM_MACH_PMIC_H
 #define __ARCH_ARM_MACH_PMIC_H
@@ -228,7 +232,6 @@ enum vreg_id {
 	PM_VREG_EXTCDC1_ID,
 	PM_VREG_EXTCDC2_ID,
 
-	/* backward compatible enums only */
 	PM_VREG_MSME_ID = PM_VREG_MSME1_ID,
 	PM_VREG_MSME_BUCK_SMPS_ID = PM_VREG_MSME1_ID,
 	PM_VREG_MSME1_LDO_ID = PM_VREG_MSME1_ID,
@@ -290,7 +293,6 @@ enum vreg_pdown_id {
 	PM_VREG_PDOWN_USB2P6_ID,
 	PM_VREG_PDOWN_USB3P3_ID,
 
-	/* backward compatible enums only */
 	PM_VREG_PDOWN_CAM_ID = PM_VREG_PDOWN_GP1_ID,
 	PM_VREG_PDOWN_MDDI_ID = PM_VREG_PDOWN_GP2_ID,
 	PM_VREG_PDOWN_RUIM2_ID = PM_VREG_PDOWN_GP3_ID,
@@ -689,6 +691,9 @@ int pmic_spkr_en_mute(enum spkr_left_right left_right, uint enabled);
 int pmic_spkr_is_mute_en(enum spkr_left_right left_right, uint *enabled);
 int pmic_mic_en(uint enable);
 int pmic_mic_is_en(uint *enabled);
+#ifdef CONFIG_FEATURE_KCC_F45
+int pmic_kc_mic_is_en(uint *enabled);
+#endif
 int pmic_mic_set_volt(enum mic_volt vol);
 int pmic_mic_get_volt(enum mic_volt *voltage);
 int pmic_set_led_intensity(enum ledtype type, int level);

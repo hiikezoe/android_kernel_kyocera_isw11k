@@ -37,6 +37,14 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.2");
 MODULE_ALIAS("platform:i2c_qup");
 
+#ifdef CONFIG_MACH_MSM8655_KC_F41_GPIOS
+extern void i2c_compulsory_reset
+(
+ int arg_iSclGpioNo,
+ int arg_iSdaGpioNo
+ );
+#endif
+
 /* QUP Registers */
 enum {
 	QUP_CONFIG              = 0x0,
@@ -632,6 +640,9 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	int rem = num;
 	long timeout;
 	int err;
+#ifdef CONFIG_MACH_MSM8655_KC_F41_GPIOS
+	bool bIsAnyoneError = true;
+#endif
 
 	del_timer_sync(&dev->pwr_timer);
 	mutex_lock(&dev->mlock);
@@ -913,7 +924,15 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	}
 
 	ret = num;
+#ifdef CONFIG_MACH_MSM8655_KC_F41_GPIOS
+	bIsAnyoneError = false;
+#endif
  out_err:
+#ifdef CONFIG_MACH_MSM8655_KC_F41_GPIOS
+	if(bIsAnyoneError == true) {
+	  i2c_compulsory_reset(0,1);
+	}
+#endif
 	disable_irq(dev->err_irq);
 	if (dev->num_irqs == 3) {
 		disable_irq(dev->in_irq);

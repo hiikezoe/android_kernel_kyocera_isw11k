@@ -26,15 +26,23 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #ifndef __ASM_ARCH_MSM_RPC_SERVER_HANDSET_H
 #define __ASM_ARCH_MSM_RPC_SERVER_HANDSET_H
 
 struct msm_handset_platform_data {
 	const char *hs_name;
-	uint32_t pwr_key_delay_ms; /* default 500ms */
+	uint32_t pwr_key_delay_ms;
 };
 
 void report_headset_status(bool connected);
 
+#ifdef CONFIG_FEATURE_KCC_F45
+extern void kc_hs_switch_change_state(bool switch_state);
+extern void kc_hs_jack_change_state(bool jack_state);
+#endif
 #endif

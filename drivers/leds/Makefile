@@ -1,3 +1,7 @@
+#
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
 
 # LED Core
 obj-$(CONFIG_NEW_LEDS)			+= led-core.o
@@ -59,3 +63,6 @@ obj-$(CONFIG_LEDS_TRIGGER_BACKLIGHT)	+= ledtrig-backlight.o
 obj-$(CONFIG_LEDS_TRIGGER_GPIO)		+= ledtrig-gpio.o
 obj-$(CONFIG_LEDS_TRIGGER_DEFAULT_ON)	+= ledtrig-default-on.o
 obj-$(CONFIG_LEDS_TRIGGER_SLEEP)	+= ledtrig-sleep.o
+
+obj-$(CONFIG_MACH_MSM8655_KC_F41_LV5207LP)	+= leds-ledlight.o
+obj-$(CONFIG_MACH_MSM8655_KC_F41_GPIO129_KEYLED)	+= leds-keyled.o

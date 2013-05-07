@@ -1,4 +1,9 @@
 #
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
+#
 # Makefile for misc devices that really don't fit anywhere else.
 #
 
@@ -64,3 +69,4 @@ obj-$(CONFIG_PMIC8058_MISC) += pmic8058-misc.o
 obj-$(CONFIG_PMIC8058_BATTALARM) += pmic8058-batt-alarm.o
 obj-$(CONFIG_TZCOM) += tzcom.o
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
+obj-$(CONFIG_DTVTUNER_PM) += dtvtuner_pm.o

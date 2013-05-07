@@ -104,6 +104,10 @@ extern struct platform_device msm_device_i2c_2;
 
 extern struct platform_device qup_device_i2c;
 
+#ifdef CONFIG_I2C_GPIO
+extern struct platform_device i2c_gpio_device;
+#endif
+
 extern struct platform_device msm_gsbi0_qup_i2c_device;
 extern struct platform_device msm_gsbi1_qup_i2c_device;
 extern struct platform_device msm_gsbi3_qup_i2c_device;
@@ -131,7 +135,7 @@ extern struct platform_device msm_device_tssc;
 
 extern struct platform_device msm_rotator_device;
 
-extern struct platform_device msm_device_tsif[2];
+extern struct platform_device msm_device_tsif;
 
 extern struct platform_device msm_device_ssbi_pmic1;
 extern struct platform_device msm_device_ssbi1;

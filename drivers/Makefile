@@ -120,3 +120,18 @@ obj-y				+= platform/
 obj-y				+= ieee802154/
 #common clk code
 obj-y				+= clk/
+obj-y				+= felica/
+#2011/08/23 F41 F41-1013C START
+obj-y				+= irda/
+obj-y				+= irda1/
+obj-y				+= irda2/
+#2011/08/23 F41 F41-1013C END
+### KC_WIMAX Add Start -----------------------------------------------------------------
+obj-y				+= bcm_sdio_wrapper/
+obj-y				+= kwimax_onoff/
+obj-y				+= kwimax_gpio_wrapper/
+### KC_WIMAX Add End -------------------------------------------------------------------
+#2011/09/30 F41 SDCardDriver START
+obj-y				+= sdcarddriver/
+#2011/09/30 F41 SDCardDriver END
+obj-y				+= sensors/

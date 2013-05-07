@@ -697,8 +697,10 @@ struct msm_snapshot_pp_status {
 #define CFG_GET_EEPROM_DATA		33
 #define CFG_SET_ACTUATOR_INFO		34
 #define CFG_GET_ACTUATOR_INFO		35
-#define CFG_MAX			36
-
+#define CFG_I2C_WRITE			36
+#define CFG_I2C_READ			37
+#define CFG_WAIT_INTERRPUT		38
+#define CFG_MAX				39
 
 #define MOVE_NEAR	0
 #define MOVE_FAR	1
@@ -837,6 +839,30 @@ struct sensor_eeprom_data_t {
 	uint16_t index;
 };
 
+struct sensor_i2c_wr_cfg {
+	uint8_t len;
+	uint8_t accsess_code;
+	uint8_t id;
+	uint8_t reg_addr;
+	uint8_t *write_data_ptr;
+};
+
+struct sensor_i2c_rd_cfg {
+	uint8_t len;
+	uint8_t reg_addr;
+	uint8_t *read_data_ptr;
+};
+
+struct sensor_pmic_cfg {
+	const char *id;
+	uint8_t ctl;
+};
+
+struct sensor_gpio_cfg {
+	uint8_t port;
+	uint8_t ctl;
+};
+
 struct sensor_cfg_data {
 	int cfgtype;
 	int mode;
@@ -862,6 +888,12 @@ struct sensor_cfg_data {
 		struct sensor_calib_data calib_info;
 		struct sensor_output_info_t output_info;
 		struct sensor_eeprom_data_t eeprom_data;
+		struct sensor_i2c_wr_cfg i2c_wr_cfg;
+		struct sensor_i2c_rd_cfg i2c_rd_cfg;
+		int8_t mclk_ctl;
+		struct sensor_pmic_cfg pmic_cfg;
+		struct sensor_gpio_cfg gpio_cfg;
+		uint32_t wait_timeout_ms;
 	} cfg;
 };
 

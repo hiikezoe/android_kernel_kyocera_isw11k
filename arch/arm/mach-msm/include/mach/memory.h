@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* arch/arm/mach-msm/include/mach/memory.h
  *
  * Copyright (C) 2007 Google, Inc.
@@ -13,6 +17,7 @@
  * GNU General Public License for more details.
  *
  */
+
 #ifndef __ASM_ARCH_MEMORY_H
 #define __ASM_ARCH_MEMORY_H
 #include <linux/types.h>
@@ -37,7 +42,8 @@
 
 #define EBI0_PHYS_OFFSET PHYS_OFFSET
 #define EBI0_PAGE_OFFSET PAGE_OFFSET
-#define EBI0_SIZE 0x10000000
+
+#define EBI0_SIZE 0x20000000
 
 #define EBI1_PHYS_OFFSET 0x40000000
 #define EBI1_PAGE_OFFSET (EBI0_PAGE_OFFSET + EBI0_SIZE)

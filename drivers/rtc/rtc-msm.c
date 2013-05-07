@@ -1,4 +1,8 @@
 /*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
+/*
  * Copyright (C) 2008 Google, Inc.
  * Copyright (c) 2009-2011 Code Aurora Forum. All rights reserved.
  * Author: San Mehat <san@google.com>
@@ -357,8 +361,10 @@ msmrtc_virtual_alarm_set(struct device *dev, struct rtc_wkalrm *a)
 	if (now > rtc_pdata->rtcalarm_time) {
 		dev_err(dev, "%s: Attempt to set alarm in the past\n",
 		       __func__);
+#if !defined(CONFIG_FEATURE_KCC_F41) && !defined(CONFIG_FEATURE_KCC_F45)
 		rtc_pdata->rtcalarm_time = 0;
 		return -EINVAL;
+#endif
 	}
 
 	return 0;
@@ -723,6 +729,9 @@ msmrtc_suspend(struct platform_device *dev, pm_message_t state)
 		}
 		msm_pm_set_max_sleep_time((int64_t)
 			((int64_t) diff * NSEC_PER_SEC));
+#if defined(CONFIG_FEATURE_KCC_F41) || defined(CONFIG_FEATURE_KCC_F45)
+		printk(KERN_DEBUG"%s:msm_pm_set_max_sleep_time = %ds\n",__func__,diff);
+#endif
 	} else
 		msm_pm_set_max_sleep_time(0);
 	atomic_inc(&suspend_state.state);

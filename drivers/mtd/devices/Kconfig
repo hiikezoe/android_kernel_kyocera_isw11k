@@ -1,3 +1,8 @@
+#
+# This software is contributed or developed by KYOCERA Corporation.
+# (C) 2011 KYOCERA Corporation
+#
+
 menu "Self-contained MTD device drivers"
 	depends on MTD!=n
 
@@ -55,7 +60,7 @@ config MTD_MSM_NAND
 	select CRC16
 	select BITREVERSE
 	select MTD_NAND_IDS
-	default y
+	default n
 	help
 	  Support for some NAND chips connected to the MSM NAND controller.
 

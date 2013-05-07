@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 /* arch/arm/mach-msm/pm2.c
  *
  * MSM Power Management Routines
@@ -15,6 +19,7 @@
  * GNU General Public License for more details.
  *
  */
+
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -169,6 +174,43 @@ static struct kobject *msm_pm_mode_kobjs[MSM_PM_SLEEP_MODE_NR];
 static struct attribute_group *msm_pm_mode_attr_group[MSM_PM_SLEEP_MODE_NR];
 static struct attribute **msm_pm_mode_attrs[MSM_PM_SLEEP_MODE_NR];
 static struct kobj_attribute *msm_pm_mode_kobj_attrs[MSM_PM_SLEEP_MODE_NR];
+
+
+#define DIAG_PWROFF_MODE_CMD_ONLY         0x01
+#define DIAG_PWROFF_MODE_CMD_WITH_ENDSEQ  0x02
+static unsigned short pwroff_mode = 0;
+
+static ssize_t msm_pwroff_mode_show(struct kobject *kobj,
+						struct kobj_attribute *attr, char *buf)
+{
+	printk(KERN_DEBUG "msm_pwroff_mode_show\n");
+	return sprintf(buf, "%hu\n", pwroff_mode);
+}
+
+static ssize_t msm_pwroff_mode_store(struct kobject *kobj,
+				struct kobj_attribute *attr, const char * buf, size_t n)
+{
+	unsigned short value = 0;
+
+	printk(KERN_DEBUG "msm_pwroff_mode_store\n");
+	if (sscanf(buf, "%hu", &value) != 1 ||
+		value > DIAG_PWROFF_MODE_CMD_WITH_ENDSEQ)
+	{
+		printk(KERN_ERR "Invalid value\n");
+		return -EINVAL;
+	}
+	pwroff_mode = value;
+
+	if( pwroff_mode == DIAG_PWROFF_MODE_CMD_WITH_ENDSEQ ) {
+		smsm_change_state(SMSM_MODEM_STATE, 0, SMSM_SYSTEM_PWRDWN_USR);
+	}
+
+	return n;
+}
+
+static struct kobj_attribute pwroff_mode_attr =
+		__ATTR(pwroff_mode, 0644, msm_pwroff_mode_show, msm_pwroff_mode_store);
+
 
 /*
  * Write out the attribute.
@@ -345,6 +387,14 @@ static int __init msm_pm_mode_sysfs_add(void)
 		msm_pm_mode_kobj_attrs[i] = kobj_attrs;
 	}
 
+	ret = sysfs_create_file(module_kobj, &pwroff_mode_attr.attr);
+	if( ret < 0 ) {
+		printk(KERN_ERR
+				"%s: cannot add sysfs entry for power off mode\n",
+				__func__);
+		goto mode_sysfs_add_abort;
+	}
+
 	return 0;
 
 mode_sysfs_add_abort:
@@ -370,11 +420,34 @@ mode_sysfs_add_cleanup:
 	return ret;
 }
 
+static struct timer_list pw_collapse_enable_timer;
+
+void power_collapse_enable( unsigned long arg )
+{
+	msm_pm_modes[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE].idle_enabled = 1;
+}
+
+void power_collapse_disable( unsigned long timeout )
+{
+	msm_pm_modes[MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE].idle_enabled = 0;
+
+	if( timeout ) {
+		init_timer( &pw_collapse_enable_timer );
+		pw_collapse_enable_timer.function = power_collapse_enable;
+		pw_collapse_enable_timer.expires = jiffies + (timeout * HZ);
+		pw_collapse_enable_timer.data = timeout;
+		add_timer( &pw_collapse_enable_timer );
+	}
+}
+
 void __init msm_pm_set_platform_data(
 	struct msm_pm_platform_data *data, int count)
 {
 	BUG_ON(MSM_PM_SLEEP_MODE_NR != count);
 	msm_pm_modes = data;
+	
+	// 2011/05/14 Tentative
+	power_collapse_disable(30);
 }
 
 
@@ -1738,10 +1811,23 @@ static struct platform_suspend_ops msm_pm_ops = {
 
 static uint32_t restart_reason = 0x776655AA;
 
+extern void diag_end_sequence_output(void);
 static void msm_pm_power_off(void)
 {
 	msm_rpcrouter_close();
 	msm_proc_comm(PCOM_POWER_DOWN, 0, 0);
+
+	if (pwroff_mode == DIAG_PWROFF_MODE_CMD_WITH_ENDSEQ) {
+		for (;;) {
+			if (smsm_get_state(SMSM_MODEM_STATE) & SMSM_SYSTEM_POWER_DOWN) {
+				diag_end_sequence_output();
+				break;
+			}
+
+			msleep(100);
+		}
+	}
+
 	for (;;)
 		;
 }

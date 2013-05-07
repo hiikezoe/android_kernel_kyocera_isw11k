@@ -1,3 +1,7 @@
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+*/
 /* Copyright (c) 2009-2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -10,7 +14,6 @@
  * GNU General Public License for more details.
  *
  */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -2289,6 +2292,8 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req,
 		}
 	}
 
+	mdp4_mddi_dma_busy_wait(mfd);
+
 	pd->player = pipe;	/* keep */
 
 	img = &req->data;
@@ -2427,7 +2432,7 @@ int mdp4_overlay_play(struct fb_info *info, struct msmfb_overlay_data *req,
 			}
 #else
 			if (ctrl->panel_mode & MDP4_PANEL_MDDI) {
-				mdp4_mddi_dma_busy_wait(mfd);
+				/* mdp4_mddi_dma_busy_wait(mfd); */
 				mdp4_mddi_kickoff_video(mfd, pipe);
 			}
 #endif

@@ -26,6 +26,10 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+/*
+ * This software is contributed or developed by KYOCERA Corporation.
+ * (C) 2011 KYOCERA Corporation
+ */
 
 #ifndef MDDIHOSTI_H
 #define MDDIHOSTI_H
@@ -565,4 +569,8 @@ uint32 mddi_get_client_id(void);
 void mddi_mhctl_remove(mddi_host_type host_idx);
 void mddi_host_timer_service(unsigned long data);
 void mddi_host_client_cnt_reset(void);
+uint32 mddi_local_crc_error_check(void);
+void mddi_set_hibernation_to_active(void);
+void mddi_set_auto_hibernation(void);
+
 #endif /* MDDIHOSTI_H */
